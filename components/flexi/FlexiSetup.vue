@@ -1,8 +1,9 @@
 <!--
   FlexiSetup.vue
-  Calculator Setup: gender toggle, DOB picker (→ auto age), bidirectional input tabs,
+  Calculator Setup: gender toggle, DOB picker (v-calendar พ.ศ. → auto age), bidirectional input tabs,
   tax rate selector, and "คำนวณเบี้ยประกัน" button.
   No default values — user must fill in all fields before calculating.
+  Age is read-only — calculated automatically from date of birth only.
 -->
 <template>
   <div class="rounded-xl p-5 space-y-4" style="background:#EBF0FA;border:1.5px solid #9BB8E8">
@@ -29,42 +30,77 @@
         </div>
       </div>
 
-      <!-- DOB -->
+      <!-- DOB — v-calendar with พ.ศ. (Buddhist Era) popup, client-only -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">วันเกิด / Date of Birth</label>
-        <input
-          type="date"
-          :value="store.dob ?? ''"
-          class="w-full rounded-xl text-xs focus:outline-none transition-all"
-          style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px"
-          @input="store.setDob(($event.target as HTMLInputElement).value)"
-          @focus="($event.target as HTMLElement).style.borderColor = '#0066B3'"
-          @blur="($event.target as HTMLElement).style.borderColor = '#9BB8E8'"
-        />
+
+        <!-- Client-side only: v-calendar DatePicker -->
+        <ClientOnly>
+          <DatePicker
+            :model-value="dobAsDate"
+            locale="th-TH-u-ca-buddhist"
+            :max-date="new Date()"
+            :min-date="new Date(1900, 0, 1)"
+            color="blue"
+            @update:model-value="onDateSelect"
+          >
+            <template #default="{ togglePopover, inputValue }">
+              <button
+                type="button"
+                class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
+                style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px"
+                @click="togglePopover()"
+              >
+                <!-- Calendar icon -->
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BB8E8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span :style="dobAsDate ? 'color:#333333' : 'color:#AAAAAA'">
+                  {{ dobAsDate ? formatBE(dobAsDate) : 'เลือกวันเกิด (พ.ศ.)' }}
+                </span>
+              </button>
+            </template>
+          </DatePicker>
+
+          <!-- SSR fallback slot -->
+          <template #fallback>
+            <input
+              type="date"
+              :value="store.dob ?? ''"
+              class="w-full rounded-xl text-xs focus:outline-none transition-all"
+              style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px"
+              @input="store.setDob(($event.target as HTMLInputElement).value)"
+            />
+          </template>
+        </ClientOnly>
       </div>
 
-      <!-- Age (auto-calculated from DOB) -->
+      <!-- Age (read-only — auto-calculated from DOB) -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">อายุ / Age</label>
-        <div class="flex items-center gap-2">
-          <input
-            type="number"
-            :min="0"
-            :max="99"
-            :value="store.age ?? ''"
-            placeholder="—"
-            class="flex-1 px-3 py-2 rounded-xl text-sm font-bold text-center focus:outline-none transition-all"
-            style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#0066B3"
-            @input="onAgeInput"
-            @focus="($event.target as HTMLElement).style.borderColor = '#0066B3'"
-            @blur="($event.target as HTMLElement).style.borderColor = '#9BB8E8'"
-          />
-          <span class="text-xs shrink-0" style="color:#666666">
-            <template v-if="store.premiumResult">
-              ปี · อัตรา {{ store.premiumResult.rate }}/พัน
-            </template>
-            <template v-else>ปี</template>
+        <div
+          class="flex items-center justify-between rounded-xl px-3 py-2"
+          style="background:#FFFFFF;border:1.5px solid #9BB8E8;min-height:38px"
+        >
+          <span class="text-xl font-bold" style="color:#0066B3">
+            {{ store.age ?? '—' }}
           </span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs" style="color:#666666">
+              ปี
+              <template v-if="store.premiumResult">
+                · อัตรา {{ store.premiumResult.rate }}/พัน
+              </template>
+            </span>
+            <span
+              class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+              style="background:#EBF0FA;color:#0066B3;border:1px solid #9BB8E8"
+            >
+              คำนวณอัตโนมัติ
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -239,12 +275,26 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { DatePicker } from 'v-calendar'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
 import { fmt } from '~/utils/flexiCalc'
+import { formatBE, toISODate } from '~/utils/dateFormat'
 import type { InputMode } from '~/types'
 
 const store = useFlexiCalculatorStore()
+
+// Convert stored ISO string (ค.ศ.) → Date object for v-calendar model
+const dobAsDate = computed<Date | null>(() =>
+  store.dob ? new Date(store.dob) : null
+)
+
+// Called when user picks a date in the v-calendar popup
+function onDateSelect(date: Date | null) {
+  if (!date) return
+  const iso = toISODate(date)
+  if (iso) store.setDob(iso)
+}
 
 const isActiveMode = (mode: InputMode) => store.inputMode === mode
 
@@ -263,14 +313,9 @@ function modeDisplay(mode: InputMode): number {
   return p.healthPerYear
 }
 
-function onAgeInput(e: Event) {
-  const a = Math.max(0, +(e.target as HTMLInputElement).value || 0)
-  store.setAge(a)
-}
-
 const validationHint = computed(() => {
-  if (!store.gender)    return 'กรุณาเลือกเพศ'
-  if (!store.age)       return 'กรุณากรอกวันเกิดหรืออายุ'
+  if (!store.gender)       return 'กรุณาเลือกเพศ'
+  if (!store.age)          return 'กรุณาเลือกวันเกิด'
   if (!store.primaryValue) return 'กรุณากรอกจำนวนเงิน'
   return 'กรุณาตรวจสอบข้อมูล'
 })

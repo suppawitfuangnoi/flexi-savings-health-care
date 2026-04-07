@@ -27,10 +27,15 @@ export default defineNuxtConfig({
     exposeConfig: false,
   },
 
+  // v-calendar needs transpiling in SSR mode
+  build: {
+    transpile: ['v-calendar'],
+  },
+
   // Vite config for dev experience
   vite: {
     optimizeDeps: {
-      include: ['chart.js', 'vue-chartjs'],
+      include: ['chart.js', 'vue-chartjs', 'v-calendar'],
     },
   },
 
