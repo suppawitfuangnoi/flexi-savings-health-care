@@ -5,11 +5,10 @@
 
   DATE PICKER ARCHITECTURE:
   - Trigger button: always in DOM (outside ClientOnly) — no SSR/hydration issues
-  - Calendar (VCalendar): wrapped in ClientOnly + v-show (never removed from DOM after mount)
-    → avoids "Cannot read properties of null (parentNode)" from dynamic DOM insert/remove
-  - Uses Calendar component (not DatePicker) — no popover/teleport mechanism
-  - Date selection via @dayclick, highlighted via :attributes
-  - Buddhist Era header via #header-title slot: page.year + 543
+  - VCalendar: inside ClientOnly + v-show (never removed after first mount)
+  - Uses resolveComponent('VCalendar') instead of direct import — avoids loading
+    v-calendar module on the server, which causes SSR "reading 'month'" errors
+  - Buddhist Era header via #header-title slot with v-if guard for page safety
 -->
 <template>
   <div class="rounded-xl p-5 space-y-4" style="background:#EBF0FA;border:1.5px solid #9BB8E8">
@@ -36,16 +35,17 @@
         </div>
       </div>
 
-      <!-- DOB ─────────────────────────────────────────────────────────────
-           Trigger: always in DOM (no ClientOnly) → no hydration conflict
-           Calendar: ClientOnly + v-show → mounted once, never re-inserted
+      <!-- DOB ──────────────────────────────────────────────────────────────
+           Trigger: outside ClientOnly → always in DOM → SSR-safe
+           VCalendar: inside ClientOnly + v-show → mounted once, never re-inserted
+           VCalendar resolved via global registry (resolveComponent) → not loaded on server
       ─────────────────────────────────────────────────────────────────── -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">วันเกิด / Date of Birth</label>
 
         <div ref="calendarWrap" class="relative">
 
-          <!-- Trigger button — always rendered (SSR safe) -->
+          <!-- Trigger button: always rendered (SSR safe, no v-calendar dependency) -->
           <button
             type="button"
             class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
@@ -65,7 +65,7 @@
               {{ dobAsDate ? formatBE(dobAsDate) : 'เลือกวันเกิด (พ.ศ.)' }}
             </span>
             <svg
-              class="shrink-0 transition-transform"
+              class="shrink-0 transition-transform duration-200"
               :class="calendarOpen ? 'rotate-180' : ''"
               width="12" height="12" viewBox="0 0 24 24" fill="none"
               stroke="#9BB8E8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
@@ -74,29 +74,29 @@
             </svg>
           </button>
 
-          <!-- Calendar dropdown: client-only, v-show avoids DOM insert/remove errors -->
+          <!-- Calendar dropdown: client-only, v-show keeps it mounted (no re-insert errors) -->
           <ClientOnly>
             <div
               v-show="calendarOpen"
               class="absolute z-50 rounded-xl overflow-hidden"
               style="top:calc(100% + 4px);left:0;box-shadow:0 8px 32px rgba(0,102,179,0.18);border:1.5px solid #9BB8E8;background:#FFFFFF"
             >
-              <VCalendar
+              <component
+                :is="vcalendar"
                 locale="th-TH"
                 :max-date="new Date()"
                 :min-date="new Date(1900, 0, 1)"
-                :initial-page="calendarPage"
                 color="blue"
                 :attributes="calendarAttrs"
                 @dayclick="onDayClick"
               >
-                <!-- Buddhist Era year: CE + 543 -->
+                <!-- Buddhist Era year: CE + 543 — guard page to prevent init errors -->
                 <template #header-title="{ page }">
-                  <span class="text-sm font-bold select-none" style="color:#1A2B4A">
-                    {{ THAI_MONTHS[page.month - 1] }} {{ page.year + 543 }}
+                  <span v-if="page && page.month" class="text-sm font-bold select-none" style="color:#1A2B4A">
+                    {{ THAI_MONTHS[(page.month as number) - 1] }} {{ (page.year as number) + 543 }}
                   </span>
                 </template>
-              </VCalendar>
+              </component>
             </div>
           </ClientOnly>
 
@@ -270,14 +270,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, resolveComponent } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { Calendar as VCalendar } from 'v-calendar'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
 import { fmt } from '~/utils/flexiCalc'
 import { formatBE, toISODate } from '~/utils/dateFormat'
 import type { InputMode } from '~/types'
+
+// ── Resolve VCalendar from global registry (registered by plugins/vcalendar.client.ts)
+// This avoids importing v-calendar at module level on the server, which caused
+// "Cannot read properties of undefined (reading 'month')" during SSR initialization.
+// On the server: resolveComponent returns the string 'VCalendar' → unknown element (no-op)
+// On the client: resolveComponent returns the registered Calendar component ✅
+const vcalendar = resolveComponent('VCalendar')
 
 const store = useFlexiCalculatorStore()
 
@@ -285,7 +291,7 @@ const store = useFlexiCalculatorStore()
 const calendarOpen = ref(false)
 const calendarWrap = ref<HTMLElement | null>(null)
 
-// Close when clicking outside — calendarWrap is always in DOM (no ClientOnly)
+// Close when clicking outside — calendarWrap is always in DOM (outside ClientOnly)
 onClickOutside(calendarWrap, () => { calendarOpen.value = false })
 
 // ── Thai month names for Buddhist Era header: CE year + 543 ─────────────
@@ -300,13 +306,7 @@ const dobAsDate = computed<Date | null>(() =>
   store.dob ? new Date(store.dob) : null
 )
 
-// Navigate calendar to selected date's month/year on open
-const calendarPage = computed(() => {
-  const d = dobAsDate.value ?? new Date()
-  return { month: d.getMonth() + 1, year: d.getFullYear() }
-})
-
-// Highlight selected date
+// Highlight selected date in calendar
 const calendarAttrs = computed(() => {
   if (!dobAsDate.value) return []
   return [{
