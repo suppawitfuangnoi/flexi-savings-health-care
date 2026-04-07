@@ -90,10 +90,12 @@
                 :attributes="calendarAttrs"
                 @dayclick="onDayClick"
               >
-                <!-- Buddhist Era year: CE + 543 — guard page to prevent init errors -->
-                <template #header-title="{ page }">
-                  <span v-if="page && page.month" class="text-sm font-bold select-none" style="color:#1A2B4A">
-                    {{ THAI_MONTHS[(page.month as number) - 1] }} {{ (page.year as number) + 543 }}
+                <!-- Buddhist Era year: CE + 543
+                     v-calendar v3 uses v-bind="page" in slot → props are spread directly
+                     so destructure { month, year } NOT { page } -->
+                <template #header-title="{ month, year }">
+                  <span v-if="month" class="text-sm font-bold select-none" style="color:#1A2B4A">
+                    {{ THAI_MONTHS[(month as number) - 1] }} {{ (year as number) + 543 }}
                   </span>
                 </template>
               </component>
