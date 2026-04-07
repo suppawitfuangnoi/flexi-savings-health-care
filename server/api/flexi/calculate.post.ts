@@ -1,47 +1,36 @@
 /**
  * POST /api/flexi/calculate
- * Runs the Flexi product computation on the server.
- * Keeps actuarial formulas server-side for auditability and versioning.
+ * Validates input and computes premium / sum assured / health benefit.
+ * Delegates computation to premiumService (swap with real API when ready).
  */
-import { compute, saFromMode, MIN_PREMIUM } from '~/utils/flexiCalc'
-import type { InputMode } from '~/types'
-
-interface CalculateRequestBody {
-  mode:      InputMode
-  value:     number
-  age:       number
-  usagePct?: number
-}
+import { calculatePremium } from '~/services/premiumService'
+import { saFromMode, MIN_SA, MAX_AGE } from '~/utils/flexiCalc'
+import type { PremiumCalcRequest } from '~/types/api'
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<CalculateRequestBody>(event)
+  const body = await readBody<PremiumCalcRequest>(event)
 
-  if (!['premium', 'sa', 'health'].includes(body.mode)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid mode' })
+  if (!['premium', 'sa', 'health'].includes(body.inputMode)) {
+    throw createError({ statusCode: 400, statusMessage: 'inputMode must be premium | sa | health' })
   }
   if (typeof body.value !== 'number' || body.value <= 0) {
     throw createError({ statusCode: 400, statusMessage: 'value must be a positive number' })
   }
-  if (typeof body.age !== 'number' || body.age < 1 || body.age > 85) {
-    throw createError({ statusCode: 400, statusMessage: 'age must be between 1 and 85' })
+  if (typeof body.age !== 'number' || body.age < 1 || body.age > MAX_AGE) {
+    throw createError({ statusCode: 400, statusMessage: `age must be between 1 and ${MAX_AGE}` })
+  }
+  if (!['M', 'F'].includes(body.gender)) {
+    throw createError({ statusCode: 400, statusMessage: "gender must be 'M' or 'F'" })
   }
 
-  const usagePct = body.usagePct ?? 0
-  if (usagePct < 0 || usagePct > 100) {
-    throw createError({ statusCode: 400, statusMessage: 'usagePct must be between 0 and 100' })
+  const sa = saFromMode(body.inputMode, body.value, body.age)
+  if (sa < MIN_SA) {
+    throw createError({
+      statusCode: 422,
+      statusMessage: 'ทุนประกันต่ำกว่าขั้นต่ำที่กำหนด',
+      data: { minSA: MIN_SA },
+    })
   }
 
-  const sa = saFromMode(body.mode, body.value, body.age)
-
-  if (sa < MIN_PREMIUM) {
-    return {
-      error: 'premiumTooLow',
-      minPremium: MIN_PREMIUM,
-      result: null,
-    }
-  }
-
-  const result = compute(sa, body.age, usagePct)
-
-  return { error: null, result }
+  return await calculatePremium(body)
 })

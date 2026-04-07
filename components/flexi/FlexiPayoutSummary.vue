@@ -113,7 +113,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { fmt } from '~/utils/flexiCalc'
+import { fmt } from '~/utils/formatters'
 
 const store = useFlexiCalculatorStore()
 const r     = computed(() => store.premiumResult)

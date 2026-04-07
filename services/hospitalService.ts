@@ -42,7 +42,7 @@ export async function getScenarios(
 ): Promise<ScenarioListResponse> {
   await delay(300)
 
-  const hospital = HOSPITALS[hospitalId - 1]
+  const hospital = HOSPITALS.find((_, i) => i + 1 === hospitalId)
   const pct      = hospital?.pct ?? 0.5
   const source   = category === 'children' ? CHILDREN_ILLNESSES : ILLNESSES
 

@@ -40,7 +40,8 @@ import {
   Filler, Tooltip, Legend,
 } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { fmt, benefitAtYear } from '~/utils/flexiCalc'
+import { benefitAtYear } from '~/utils/flexiCalc'
+import { fmt } from '~/utils/formatters'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 

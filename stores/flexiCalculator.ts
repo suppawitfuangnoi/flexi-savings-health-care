@@ -1,25 +1,26 @@
 /**
  * stores/flexiCalculator.ts
  * Pinia store for the Flexi Calculator.
- * All data is API-driven. State is blank (null) until user completes setup and triggers calculation.
+ * All data is fetched via server API routes (/api/*).
+ * State is blank (null) until the user completes setup and triggers calculation.
  */
 import { defineStore } from 'pinia'
-import { dobFromAge, ageFromDob, CONTRACT_YEARS, benefitAtYear, balanceBeforeScenario } from '~/utils/flexiCalc'
-import { calculatePremium }  from '~/services/premiumService'
-import { getTaxOptions }     from '~/services/taxService'
-import { getHospitals, getScenarios } from '~/services/hospitalService'
-import { getBenefitTable }   from '~/services/benefitService'
+import { $fetch } from 'ofetch'
+import {
+  dobFromAge, ageFromDob,
+  CONTRACT_YEARS, NO_CLAIM_BONUS_PCT, MAX_AGE,
+  benefitAtYear, balanceBeforeScenario,
+} from '~/utils/flexiCalc'
+import { MODE_CONFIG } from '~/constants/flexiConstants'
+import { DEFAULT_HOSPITAL_SHORT } from '~/constants/flexiConstants'
 import type { InputMode, Scenario } from '~/types'
 import type {
   PremiumCalcResponse, BenefitTableResponse,
   ApiHospital, ApiScenario, TaxOption, ApiScenarioCategory,
+  HospitalListResponse, ScenarioListResponse, TaxOptionsResponse,
 } from '~/types/api'
 
-const MODE_MIN: Record<InputMode, number> = {
-  premium: 10_000,
-  sa:      50_000,
-  health:  5_000,
-}
+// ─── State interface ──────────────────────────────────────────────────────────
 
 interface FlexiCalculatorState {
   // ── Setup ─────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ interface FlexiCalculatorState {
   loadingCalc:     boolean
   loadingHospitals: boolean
   loadingScenarios: boolean
+  calcError:       string | null
   // ── API results ───────────────────────────────────────────────────────────
   premiumResult:     PremiumCalcResponse | null
   benefitTable:      BenefitTableResponse | null
@@ -59,6 +61,8 @@ interface FlexiCalculatorState {
   projectionView:  'table' | 'chart'
 }
 
+// ─── Store ────────────────────────────────────────────────────────────────────
+
 export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
   state: (): FlexiCalculatorState => ({
     gender:       null,
@@ -71,6 +75,7 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     loadingCalc:     false,
     loadingHospitals: false,
     loadingScenarios: false,
+    calcError:       null,
 
     premiumResult:     null,
     benefitTable:      null,
@@ -109,7 +114,7 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     },
 
     noClaimBonusAdj(): number {
-      return benefitAtYear(CONTRACT_YEARS, this.scenarios, this.healthPerYear) * 0.20
+      return benefitAtYear(CONTRACT_YEARS, this.scenarios, this.healthPerYear) * NO_CLAIM_BONUS_PCT
     },
 
     totalScenarioCost(): number {
@@ -133,8 +138,8 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
 
     totalReceivedAdj(): number {
       if (!this.premiumResult) return 0
-      const maxAccum    = benefitAtYear(CONTRACT_YEARS, this.scenarios, this.healthPerYear)
-      const noClaimBonus = maxAccum * 0.20
+      const maxAccum     = benefitAtYear(CONTRACT_YEARS, this.scenarios, this.healthPerYear)
+      const noClaimBonus = maxAccum * NO_CLAIM_BONUS_PCT
       return this.premiumResult.maturity
         + this.premiumResult.cashReturn * CONTRACT_YEARS
         + maxAccum + noClaimBonus
@@ -148,9 +153,11 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     canCalculate(): boolean {
       return (
         this.gender !== null &&
-        this.age !== null && this.age > 0 &&
+        this.age !== null &&
+        this.age > 0 &&
+        this.age <= MAX_AGE &&
         this.primaryValue !== null &&
-        this.primaryValue >= MODE_MIN[this.inputMode]
+        this.primaryValue >= MODE_CONFIG[this.inputMode].min
       )
     },
   },
@@ -178,37 +185,47 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
         health:  this.premiumResult.healthPerYear,
       }
       this.inputMode    = newMode
-      this.primaryValue = Math.max(MODE_MIN[newMode], Math.round(valueMap[newMode]))
+      this.primaryValue = Math.max(MODE_CONFIG[newMode].min, Math.round(valueMap[newMode]))
     },
 
     async calculate() {
       if (!this.canCalculate) return
       this.loadingCalc = true
+      this.calcError   = null
       try {
-        const premRes = await calculatePremium({
-          age:       this.age!,
-          gender:    this.gender!,
-          inputMode: this.inputMode,
-          value:     this.primaryValue!,
+        const premRes = await $fetch<PremiumCalcResponse>('/api/flexi/calculate', {
+          method: 'POST',
+          body: {
+            age:       this.age!,
+            gender:    this.gender!,
+            inputMode: this.inputMode,
+            value:     this.primaryValue!,
+          },
         })
-        const tableRes = await getBenefitTable({
-          age:           this.age!,
-          gender:        this.gender!,
-          sumAssured:    premRes.sumAssured,
-          annualPremium: premRes.annualPremium,
-          healthPerYear: premRes.healthPerYear,
+        const tableRes = await $fetch<BenefitTableResponse>('/api/benefit-table', {
+          method: 'POST',
+          body: {
+            age:           this.age!,
+            gender:        this.gender!,
+            sumAssured:    premRes.sumAssured,
+            annualPremium: premRes.annualPremium,
+            healthPerYear: premRes.healthPerYear,
+          },
         })
-        this.scenarios    = []
+        this.scenarios     = []
         this.premiumResult = premRes
         this.benefitTable  = tableRes
         this.isCalculated  = true
-        // Auto-fetch scenarios for selected hospital
         if (this.selectedHospitalId) {
           await Promise.all([
             this.fetchScenarios(this.selectedHospitalId, 'adult'),
             this.fetchScenarios(this.selectedHospitalId, 'children'),
           ])
         }
+      } catch (e: unknown) {
+        const msg = (e instanceof Error) ? e.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+        this.calcError    = msg
+        this.isCalculated = false
       } finally {
         this.loadingCalc = false
       }
@@ -217,12 +234,11 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     async fetchHospitals() {
       this.loadingHospitals = true
       try {
-        const res = await getHospitals()
+        const res = await $fetch<HospitalListResponse>('/api/hospitals')
         this.apiHospitals = res.hospitals
         if (res.hospitals.length > 0 && !this.selectedHospitalId) {
-          // Default: index 3 = Phyathai (same as before)
-          const phyathai = res.hospitals.find(h => h.short === 'Phyathai')
-          this.selectedHospitalId = phyathai?.id ?? res.hospitals[0].id
+          const defaultHospital = res.hospitals.find((h: ApiHospital) => h.short === DEFAULT_HOSPITAL_SHORT)
+          this.selectedHospitalId = defaultHospital?.id ?? res.hospitals[0].id
         }
       } finally {
         this.loadingHospitals = false
@@ -230,20 +246,21 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     },
 
     async fetchTaxOptions() {
-      const res = await getTaxOptions()
+      const res = await $fetch<TaxOptionsResponse>('/api/tax-options')
       this.taxOptions        = res.options
-      this.selectedTaxOption = res.options.find(o => o.rate === 0) ?? null
+      this.selectedTaxOption = res.options.find((o: TaxOption) => o.rate === 0) ?? null
     },
 
     async fetchScenarios(hospitalId: number, category: ApiScenarioCategory) {
       this.loadingScenarios = true
       try {
-        const res = await getScenarios(hospitalId, category)
-        if (category === 'adult')    this.adultScenarios    = res.scenarios
-        else                         this.childrenScenarios = res.scenarios
-        // Auto-select first non-custom scenario
+        const res = await $fetch<ScenarioListResponse>('/api/scenarios', {
+          query: { hospitalId, category },
+        })
+        if (category === 'adult') this.adultScenarios    = res.scenarios
+        else                      this.childrenScenarios = res.scenarios
         if (!this.pendingScenarioId || this.illnessTab === category) {
-          const first = res.scenarios.find(s => !s.isCustom)
+          const first = res.scenarios.find((s: ApiScenario) => !s.isCustom)
           if (first) this.pendingScenarioId = first.id
         }
       } finally {

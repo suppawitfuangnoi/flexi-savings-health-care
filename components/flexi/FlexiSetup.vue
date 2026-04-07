@@ -76,8 +76,8 @@
             <component
               :is="calendarComp"
               locale="th-TH"
-              :max-date="TODAY"
-              :min-date="MIN_BIRTH_DATE"
+              :max-date="today"
+              :min-date="minBirthDate"
               :initial-page="calendarInitialPage"
               color="blue"
               :attributes="calendarAttrs"
@@ -261,153 +261,42 @@
     <p v-if="!store.canCalculate && !store.loadingCalc" class="text-center text-[11px]" style="color:#AAAAAA">
       {{ validationHint }}
     </p>
+    <p v-if="store.calcError" class="text-center text-[11px] font-semibold" style="color:#DC2626">
+      {{ store.calcError }}
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted, onUnmounted, nextTick, type Component } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { computed } from 'vue'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
-import { fmt } from '~/utils/flexiCalc'
-import { formatBE, toISODate } from '~/utils/dateFormat'
+import { fmt } from '~/utils/formatters'
+import { formatBE } from '~/utils/dateFormat'
+import { useBECalendar } from '~/composables/useBECalendar'
 import type { InputMode } from '~/types'
 
 const store = useFlexiCalculatorStore()
 
-// ── Date bounds: today and 100 years back ────────────────────────────────
-const TODAY = new Date()
-const MIN_BIRTH_DATE = new Date(TODAY.getFullYear() - 100, TODAY.getMonth(), TODAY.getDate())
-
-// ── Date model (declared early — used by calendarInitialPage below) ──────
+// ── Date model ───────────────────────────────────────────────────────────────
 const dobAsDate = computed<Date | null>(() =>
   store.dob ? new Date(store.dob) : null
 )
 
-/** v-calendar initial page — CE month/year so calendar opens at correct month */
-const calendarInitialPage = computed(() => {
-  // If user already picked a DOB, open at that month; otherwise open at today
-  if (dobAsDate.value) {
-    return { month: dobAsDate.value.getMonth() + 1, year: dobAsDate.value.getFullYear() }
-  }
-  return { month: TODAY.getMonth() + 1, year: TODAY.getFullYear() }
-})
-
-// ── Lazy-load Calendar client-only ──────────────────────────────────────
-const calendarComp = shallowRef<Component | null>(null)
-let navObserver: MutationObserver | null = null
-
-onMounted(async () => {
-  const { Calendar } = await import('v-calendar')
-  calendarComp.value = Calendar
-
-  // ④ MutationObserver: bulletproof fallback — converts any CE years that
-  //    slip past the slots (e.g., when nav slots aren't forwarded by CalendarPane)
-  await nextTick()
-  if (calendarWrap.value) {
-    navObserver = new MutationObserver(() => fixNavBE())
-    navObserver.observe(calendarWrap.value, { subtree: true, childList: true })
-  }
-})
-
-onUnmounted(() => {
-  navObserver?.disconnect()
-  navObserver = null
-})
-
-// ── MutationObserver: fix CE years in nav DOM elements ───────────────────
-// Targets .vc-nav-title ("1992 - 2003") and .vc-nav-item ("1997")
-// Safe: CE years 1900-2099 don't overlap with BE years 2443-2642
-function fixNavBE() {
-  const root = calendarWrap.value
-  if (!root) return
-
-  // Nav range title: "1926 - 2026" → "2469 - 2569"
-  root.querySelectorAll<HTMLElement>('.vc-nav-title').forEach(el => {
-    const text = el.textContent ?? ''
-    const fixed = text.replace(/\b(\d{4})\b/g, m => {
-      const n = Number(m)
-      return n >= 1850 && n <= 2099 ? String(n + 543) : m
-    })
-    if (fixed !== text) el.textContent = fixed
-  })
-
-  // Individual year buttons: "1997" → "2540"
-  root.querySelectorAll<HTMLElement>('.vc-nav-item').forEach(el => {
-    const text = (el.textContent ?? '').trim()
-    if (/^\d{4}$/.test(text)) {
-      const n = Number(text)
-      if (n >= 1850 && n <= 2099) el.textContent = String(n + 543)
-    }
-  })
-}
-
-// ── Calendar dropdown state ──────────────────────────────────────────────
-const calendarOpen = ref(false)
-const calendarWrap = ref<HTMLElement | null>(null)
-onClickOutside(calendarWrap, () => { calendarOpen.value = false })
-
-// ── Thai months ──────────────────────────────────────────────────────────
-const THAI_MONTHS = [
-  'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน',
-  'พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม',
-  'กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม',
-]
-
-// ── CE → BE year conversion helpers ─────────────────────────────────────
-
-/**
- * Replace all 4-digit CE years with BE (+543) in a string.
- * Range 1850–2099 covers any historical date the calendar can show.
- * BE years (2393+) are safely outside this CE range so no double-conversion.
- */
-function ceToBE(text: string): string {
-  return text.replace(/\b(\d{4})\b/g, m => {
-    const n = Number(m)
-    return n >= 1850 && n <= 2099 ? String(n + 543) : m
-  })
-}
-
-/** #header-title slot — captures spread props from CalendarPage */
-function beHeader(s: Record<string, unknown>): string {
-  if (!s) return ''
-  // Strategy A: month + year props spread directly (v-calendar v3 v-bind="page")
-  if (typeof s.month === 'number' && typeof s.year === 'number') {
-    return `${THAI_MONTHS[s.month - 1]} ${s.year + 543}`
-  }
-  // Strategy B: pre-formatted title string
-  if (typeof s.title === 'string') return ceToBE(s.title)
-  return ''
-}
-
-/** #nav-item slot — individual year or Thai month abbreviation */
-function navItemBE(item: Record<string, unknown>): string | number {
-  const label = String(item?.label ?? item?.year ?? '')
-  if (/^\d{4}$/.test(label)) {
-    const n = Number(label)
-    if (n >= 1850 && n <= 2099) return n + 543
-  }
-  return label  // Thai month abbreviation: pass through unchanged
-}
-
-// ── Calendar attributes (selected date highlight) ───────────────────────
-const calendarAttrs = computed(() => {
-  if (!dobAsDate.value) return []
-  return [{
-    key: 'selected',
-    dates: dobAsDate.value,
-    highlight: { color: 'blue', fillMode: 'solid' },
-  }]
-})
-
-function onDayClick(day: { date: Date; isDisabled?: boolean }) {
-  if (day.isDisabled) return
-  const iso = toISODate(day.date)
-  if (iso) {
-    store.setDob(iso)
-    calendarOpen.value = false
-  }
-}
+// ── Calendar (Buddhist Era date picker) ──────────────────────────────────────
+const {
+  calendarComp,
+  calendarOpen,
+  calendarWrap,
+  calendarAttrs,
+  calendarInitialPage,
+  today,
+  minBirthDate,
+  beHeader,
+  navItemBE,
+  ceToBE,
+  onDayClick,
+} = useBECalendar(dobAsDate, (isoDate) => store.setDob(isoDate))
 
 // ── Bidirectional tabs ───────────────────────────────────────────────────
 const isActiveMode = (mode: InputMode) => store.inputMode === mode

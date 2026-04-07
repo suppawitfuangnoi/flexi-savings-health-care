@@ -5,9 +5,7 @@
  * ⚠️  Business-critical constants — DO NOT change without actuary confirmation.
  * All functions are pure (no side effects) and safe to run on server or client.
  */
-import type { InputMode, FlexiComputeResult } from '~/types'
-import { ILLNESSES, CHILDREN_ILLNESSES } from '~/constants/illnesses'
-import type { Illness, Scenario, ScenarioList } from '~/types'
+import type { InputMode, FlexiComputeResult, Scenario } from '~/types'
 
 // ─── Actuarial constants ──────────────────────────────────────────────────────
 
@@ -17,7 +15,12 @@ export const CASH_RETURN_PCT     = 0.02   // 2% annual cash return on SA
 export const HEALTH_BENEFIT_PCT  = 0.10   // 10% annual health benefit on SA
 export const MATURITY_PCT        = 5.00   // 500% maturity payout at end
 export const NO_CLAIM_BONUS_PCT  = 0.20   // 20% no-claim bonus on unused health
-export const MIN_PREMIUM         = 50_000 // Minimum annual premium (฿)
+/** Minimum annual premium (฿) enforced in UI validation. */
+export const MIN_PREMIUM         = 50_000
+/** Minimum Sum Assured (฿) — bottom of SA band 0. Used for server-side validation. */
+export const MIN_SA  = 50_000
+/** Maximum insured entry age supported by the rate table. */
+export const MAX_AGE = 85
 
 // ─── Rate table: age bracket × SA bracket → rate per 1,000 SA ────────────────
 
@@ -119,32 +122,6 @@ export function compute(sa: number, age: number, usagePct: number): FlexiCompute
     maturity, noClaimBonus, finalPayout,
     totalCash, totalHealthUsed, totalReceived, netGainLoss,
   }
-}
-
-/** Format a number to Thai locale currency string (no decimals). */
-export function fmt(n: number): string {
-  return Math.abs(Math.round(n)).toLocaleString('en-US')
-}
-
-// ─── Scenario helpers (shared across components) ──────────────────────────────
-
-/**
- * Look up an illness from either the general or children list.
- * Falls back to index 0 to avoid undefined errors.
- */
-export function getIllness(illIdx: number, list: ScenarioList): Illness {
-  return list === 'children'
-    ? CHILDREN_ILLNESSES[illIdx] ?? CHILDREN_ILLNESSES[0]
-    : ILLNESSES[illIdx] ?? ILLNESSES[0]
-}
-
-/**
- * Interpolated cost of an illness at the selected hospital tier.
- * Custom illness (min=0, max=0) returns the manually entered customIllCost.
- */
-export function costUsed(ill: Illness, hospitalPct: number, customIllCost: number): number {
-  if (ill.min === 0 && ill.max === 0) return customIllCost
-  return Math.round(ill.min + (ill.max - ill.min) * hospitalPct)
 }
 
 /**

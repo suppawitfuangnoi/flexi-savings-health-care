@@ -39,3 +39,6 @@ export const MODE_ORDER: InputMode[] = ['premium', 'sa', 'health']
 
 export const TAX_RATES = [0, 5, 10, 15, 20, 25, 30, 35] as const
 export type TaxRate = typeof TAX_RATES[number]
+
+/** Short name of the default hospital pre-selected on first load. */
+export const DEFAULT_HOSPITAL_SHORT = 'Phyathai' as const

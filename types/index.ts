@@ -1,6 +1,6 @@
 /**
  * types/index.ts
- * Central type definitions for Goal Genie Pro.
+ * Central type definitions for Flexi Savings Health Care.
  * All business-domain types live here; no framework-specific imports.
  */
 
@@ -101,29 +101,3 @@ export interface YearlyProjection {
   premiumPaid:      number
 }
 
-// ─── Legacy segmentation (kept for compatibility) ─────────────────────────────
-
-export type AgeSegment  = 'first_step' | 'building' | 'stable' | 'wealthy' | 'retired'
-export type WealthTier  = 'wealth' | 'affluent' | 'mass'
-export type Lifestyle   = 'sink_dink' | 'parent' | 'entrepreneur' | 'senior_wealth'
-export type BehaviorType = 'risk_averse' | 'balanced' | 'growth_oriented' | 'income_seeker'
-export type RiskLevel   = 'low' | 'medium' | 'high'
-export type FinancialNeed = 'protection' | 'savings' | 'investment' | 'retirement' | 'tax' | 'inheritance'
-export type HealthConcern = 'none' | 'moderate' | 'high'
-
-export interface LegacyCustomerProfile {
-  ageSegment:    AgeSegment
-  wealthTier:    WealthTier
-  lifestyle:     Lifestyle
-  behavior:      BehaviorType
-  riskLevel:     RiskLevel
-  financialNeeds: FinancialNeed[]
-  healthConcern: HealthConcern
-}
-
-export interface Recommendation {
-  product:    string
-  confidence: number
-  reasons:    string[]
-  features:   string[]
-}
