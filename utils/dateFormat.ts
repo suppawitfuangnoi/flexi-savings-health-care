@@ -32,9 +32,13 @@ export function formatBELong(date: Date | null | undefined): string {
 
 /**
  * Convert a Date object to ISO date string (ค.ศ.) for API transmission.
- * e.g. new Date('1990-01-15') → "1990-01-15"
+ * Uses LOCAL date components (not UTC) to avoid timezone off-by-one errors.
+ * e.g. clicking June 12 in UTC+7 correctly returns "1990-06-12", not "1990-06-11".
  */
 export function toISODate(date: Date | null | undefined): string | null {
   if (!date) return null
-  return date.toISOString().split('T')[0]
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
