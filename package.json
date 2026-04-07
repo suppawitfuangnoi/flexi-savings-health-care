@@ -1,0 +1,41 @@
+{
+  "name": "goal-genie-pro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build":   "nuxt build",
+    "dev":     "nuxt dev --port 8080",
+    "preview": "nuxt preview",
+    "lint":    "eslint .",
+    "test":    "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@pinia/nuxt":            "^0.5.5",
+    "@vueuse/core":           "^10.11.0",
+    "@vueuse/nuxt":           "^10.11.0",
+    "chart.js":               "^4.4.3",
+    "clsx":                   "^2.1.1",
+    "lucide-vue-next":        "^0.395.0",
+    "nuxt":                   "^3.12.3",
+    "pinia":                  "^2.2.0",
+    "tailwind-merge":         "^2.4.0",
+    "vue":                    "^3.4.31",
+    "vue-chartjs":            "^5.3.1",
+    "vue-router":             "^4.3.3"
+  },
+  "devDependencies": {
+    "@nuxt/test-utils":       "^3.13.1",
+    "@nuxtjs/tailwindcss":    "^6.12.1",
+    "@vue/test-utils":        "^2.4.6",
+    "autoprefixer":           "^10.4.19",
+    "happy-dom":              "^14.12.3",
+    "postcss":                "^8.4.39",
+    "tailwindcss":            "^3.4.6",
+    "tailwindcss-animate":    "^1.0.7",
+    "typescript":             "^5.5.3",
+    "vitest":                 "^2.0.3",
+    "vue-tsc":                "^2.0.26"
+  }
+}
