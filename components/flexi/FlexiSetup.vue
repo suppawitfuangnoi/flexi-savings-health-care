@@ -76,8 +76,9 @@
             <component
               :is="calendarComp"
               locale="th-TH"
-              :max-date="new Date()"
-              :min-date="new Date(1900, 0, 1)"
+              :max-date="TODAY"
+              :min-date="MIN_BIRTH_DATE"
+              :initial-page="calendarInitialPage"
               color="blue"
               :attributes="calendarAttrs"
               @dayclick="onDayClick"
@@ -274,6 +275,24 @@ import type { InputMode } from '~/types'
 
 const store = useFlexiCalculatorStore()
 
+// ── Date bounds: today and 100 years back ────────────────────────────────
+const TODAY = new Date()
+const MIN_BIRTH_DATE = new Date(TODAY.getFullYear() - 100, TODAY.getMonth(), TODAY.getDate())
+
+// ── Date model (declared early — used by calendarInitialPage below) ──────
+const dobAsDate = computed<Date | null>(() =>
+  store.dob ? new Date(store.dob) : null
+)
+
+/** v-calendar initial page — CE month/year so calendar opens at correct month */
+const calendarInitialPage = computed(() => {
+  // If user already picked a DOB, open at that month; otherwise open at today
+  if (dobAsDate.value) {
+    return { month: dobAsDate.value.getMonth() + 1, year: dobAsDate.value.getFullYear() }
+  }
+  return { month: TODAY.getMonth() + 1, year: TODAY.getFullYear() }
+})
+
 // ── Lazy-load Calendar client-only ──────────────────────────────────────
 const calendarComp = shallowRef<Component | null>(null)
 let navObserver: MutationObserver | null = null
@@ -303,12 +322,12 @@ function fixNavBE() {
   const root = calendarWrap.value
   if (!root) return
 
-  // Nav range title: "1992 - 2003" → "2535 - 2546"
+  // Nav range title: "1926 - 2026" → "2469 - 2569"
   root.querySelectorAll<HTMLElement>('.vc-nav-title').forEach(el => {
     const text = el.textContent ?? ''
     const fixed = text.replace(/\b(\d{4})\b/g, m => {
       const n = Number(m)
-      return n >= 1900 && n <= 2099 ? String(n + 543) : m
+      return n >= 1850 && n <= 2099 ? String(n + 543) : m
     })
     if (fixed !== text) el.textContent = fixed
   })
@@ -318,7 +337,7 @@ function fixNavBE() {
     const text = (el.textContent ?? '').trim()
     if (/^\d{4}$/.test(text)) {
       const n = Number(text)
-      if (n >= 1900 && n <= 2099) el.textContent = String(n + 543)
+      if (n >= 1850 && n <= 2099) el.textContent = String(n + 543)
     }
   })
 }
@@ -337,11 +356,15 @@ const THAI_MONTHS = [
 
 // ── CE → BE year conversion helpers ─────────────────────────────────────
 
-/** Replace all 4-digit CE years (1900-2099) with BE (+543) in a string */
+/**
+ * Replace all 4-digit CE years with BE (+543) in a string.
+ * Range 1850–2099 covers any historical date the calendar can show.
+ * BE years (2393+) are safely outside this CE range so no double-conversion.
+ */
 function ceToBE(text: string): string {
   return text.replace(/\b(\d{4})\b/g, m => {
     const n = Number(m)
-    return n >= 1900 && n <= 2099 ? String(n + 543) : m
+    return n >= 1850 && n <= 2099 ? String(n + 543) : m
   })
 }
 
@@ -362,16 +385,12 @@ function navItemBE(item: Record<string, unknown>): string | number {
   const label = String(item?.label ?? item?.year ?? '')
   if (/^\d{4}$/.test(label)) {
     const n = Number(label)
-    if (n >= 1900 && n <= 2099) return n + 543
+    if (n >= 1850 && n <= 2099) return n + 543
   }
   return label  // Thai month abbreviation: pass through unchanged
 }
 
-// ── Date model ───────────────────────────────────────────────────────────
-const dobAsDate = computed<Date | null>(() =>
-  store.dob ? new Date(store.dob) : null
-)
-
+// ── Calendar attributes (selected date highlight) ───────────────────────
 const calendarAttrs = computed(() => {
   if (!dobAsDate.value) return []
   return [{
