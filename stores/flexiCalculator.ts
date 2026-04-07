@@ -223,8 +223,21 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
           ])
         }
       } catch (e: unknown) {
-        const msg = (e instanceof Error) ? e.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
-        this.calcError    = msg
+        // ofetch wraps HTTP errors in FetchError — e.message is the raw
+        // "[POST] /api/…: 422 Unprocessable Entity" string which is not
+        // user-friendly.  Extract the Nuxt statusMessage from the response
+        // body instead, then fall back to a generic Thai message.
+        const fe  = e as { response?: { status?: number; _data?: { statusMessage?: string } } }
+        const status    = fe?.response?.status
+        const serverMsg = fe?.response?._data?.statusMessage
+
+        if (status === 422) {
+          this.calcError = serverMsg ?? 'ทุนประกันต่ำกว่าขั้นต่ำที่กำหนด (ขั้นต่ำ ฿50,000)'
+        } else if (status === 400) {
+          this.calcError = 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง'
+        } else {
+          this.calcError = 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+        }
         this.isCalculated = false
       } finally {
         this.loadingCalc = false

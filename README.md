@@ -554,7 +554,7 @@ await delay(400)
 npm run dev
 
 # เปิด browser → http://localhost:8080
-# กรอกข้อมูล → กด "คำนวณเบี้ยประกัน"
+# กรอกข้อมูล (เพศ + วันเกิด + จำนวนเงิน) — ระบบคำนวณอัตโนมัติ
 # เปิด DevTools → Network tab
 # ควรเห็น request ไป /api/flexi/calculate (Nuxt proxy)
 # และ server route forward ต่อไป backend ของคุณ
@@ -568,7 +568,7 @@ npm run dev
 - [ ] ตั้งค่า `NUXT_API_SECRET` (ถ้า backend ต้องการ auth)
 - [ ] ลบ `await delay(...)` ออกจาก `services/` ทุกไฟล์
 - [ ] ตรวจสอบ CORS ที่ backend ให้รับ request จาก Nuxt server ได้
-- [ ] ทดสอบ error path: backend ล่ม → frontend แสดง error message ใต้ปุ่มคำนวณ
+- [ ] ทดสอบ error path: backend ล่ม → frontend แสดง error message ใน auto-calc status bar
 - [ ] Run `npm run build` และทดสอบ production build
 - [ ] Run `npm test` — unit tests ยังผ่านครบ 21 tests
 
@@ -578,10 +578,10 @@ npm run dev
 
 | สถานการณ์ | HTTP Status | ผลลัพธ์ใน Frontend |
 |---|---|---|
-| Input ไม่ถูกต้อง | 400 | `store.calcError` แสดงใต้ปุ่มคำนวณ |
-| ทุนประกันต่ำกว่าขั้นต่ำ | 422 | `store.calcError` แสดงใต้ปุ่มคำนวณ |
-| Backend ล่ม / Network error | 500 / Network Error | `store.calcError` แสดงใต้ปุ่มคำนวณ |
-| อายุเกิน MAX_AGE (85) | — | ปุ่มคำนวณ disabled ก่อนส่ง request |
+| Input ไม่ถูกต้อง | 400 | `store.calcError` แสดงใน auto-calc status bar (สีแดง) |
+| ทุนประกันต่ำกว่าขั้นต่ำ | 422 | `store.calcError` แสดงใน auto-calc status bar (สีแดง) |
+| Backend ล่ม / Network error | 500 / Network Error | `store.calcError` แสดงใน auto-calc status bar (สีแดง) |
+| อายุเกิน MAX_AGE (85) | — | `canCalculate = false` — ไม่ส่ง request, แสดง hint สีเทา |
 
 ---
 
@@ -600,7 +600,7 @@ npm run dev
 ### v1.1.0
 - **API-driven architecture**: ข้อมูลทั้งหมดมาจาก Mock API (`services/`)
 - **Blank form on load**: ไม่มี default values — ผู้ใช้ต้องกรอกข้อมูลเอง
-- **Calculate button**: กด "คำนวณเบี้ยประกัน" จึงแสดงตาราง + กราฟ
+- **Auto-calculation**: กรอกข้อมูลครบ (เพศ + วันเกิด + จำนวนเงิน) — ระบบคำนวณอัตโนมัติโดยไม่ต้องกดปุ่ม
 - **New types**: `types/api.ts` สำหรับ API contracts
 - **Buddhist Era calendar**: v-calendar แสดงปี พ.ศ. ครบทุก view
 

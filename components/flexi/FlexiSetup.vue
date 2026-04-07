@@ -239,36 +239,59 @@
       </span>
     </div>
 
-    <!-- Calculate button -->
-    <button
-      class="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-      :style="store.canCalculate && !store.loadingCalc
-        ? 'background:#0066B3;color:#FFFFFF;box-shadow:0 4px 16px rgba(0,102,179,0.30)'
-        : 'background:#CCCCCC;color:#FFFFFF;cursor:not-allowed'"
-      :disabled="!store.canCalculate || store.loadingCalc"
-      @click="store.calculate()"
-    >
-      <svg v-if="store.loadingCalc" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="animate-spin">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>
-      <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/>
-        <line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/>
-      </svg>
-      {{ store.loadingCalc ? 'กำลังคำนวณ…' : store.isCalculated ? 'คำนวณใหม่' : 'คำนวณเบี้ยประกัน' }}
-    </button>
+    <!-- Auto-calc status bar (replaces manual calculate button) -->
+    <div class="flex items-center justify-center gap-2 min-h-[42px] rounded-xl px-4 py-2.5"
+         :style="autoCalcBarStyle">
 
-    <p v-if="!store.canCalculate && !store.loadingCalc" class="text-center text-[11px]" style="color:#AAAAAA">
-      {{ validationHint }}
-    </p>
-    <p v-if="store.calcError" class="text-center text-[11px] font-semibold" style="color:#DC2626">
-      {{ store.calcError }}
-    </p>
+      <!-- ① Calculating -->
+      <template v-if="store.loadingCalc">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0066B3"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+             class="animate-spin shrink-0">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <span class="text-xs font-semibold" style="color:#0066B3">กำลังคำนวณ…</span>
+      </template>
+
+      <!-- ② Error -->
+      <template v-else-if="store.calcError">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span class="text-xs font-semibold" style="color:#DC2626">{{ store.calcError }}</span>
+      </template>
+
+      <!-- ③ Calculated OK -->
+      <template v-else-if="store.isCalculated">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0A8A4C"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span class="text-xs font-semibold" style="color:#0A8A4C">
+          คำนวณอัตโนมัติแล้ว — แก้ไขข้อมูลเพื่ออัปเดต
+        </span>
+      </template>
+
+      <!-- ④ Waiting for required fields -->
+      <template v-else>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#AAAAAA"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span class="text-xs" style="color:#AAAAAA">{{ validationHint }}</span>
+      </template>
+
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
 import { fmt } from '~/utils/formatters'
@@ -298,7 +321,26 @@ const {
   onDayClick,
 } = useBECalendar(dobAsDate, (isoDate) => store.setDob(isoDate))
 
-// ── Bidirectional tabs ───────────────────────────────────────────────────
+// ── Auto-calculation: Watch + Debounce ───────────────────────────────────────
+// Fires 800 ms after the last change to any of the 4 key fields.
+// canCalculate acts as a guard — all required fields must be valid before
+// the API is called (เพศ ✓  วันเกิด ✓  จำนวนเงิน ≥ min ✓  อายุ ≤ MAX_AGE ✓)
+const debouncedCalculate = useDebounceFn(() => {
+  if (store.canCalculate) store.calculate()
+}, 800)
+
+watch(
+  () => [store.gender, store.age, store.primaryValue, store.inputMode] as const,
+  () => {
+    // Clear any previous error immediately so user gets instant feedback
+    // that they are fixing the issue — error only reappears if the new
+    // value still fails after the debounce fires.
+    store.calcError = null
+    debouncedCalculate()
+  },
+)
+
+// ── Bidirectional tabs ───────────────────────────────────────────────────────
 const isActiveMode = (mode: InputMode) => store.inputMode === mode
 
 const premiumTooLow = computed(() => {
@@ -316,10 +358,19 @@ function modeDisplay(mode: InputMode): number {
   return p.healthPerYear
 }
 
+// ── Validation hint (shown when fields are incomplete) ───────────────────────
 const validationHint = computed(() => {
   if (!store.gender)       return 'กรุณาเลือกเพศ'
-  if (!store.age)          return 'กรุณาเลือกวันเกิด'
+  if (!store.dob)          return 'กรุณาเลือกวันเกิด'
   if (!store.primaryValue) return 'กรุณากรอกจำนวนเงิน'
   return 'กรุณาตรวจสอบข้อมูล'
+})
+
+// ── Status bar background style ──────────────────────────────────────────────
+const autoCalcBarStyle = computed(() => {
+  if (store.loadingCalc)                  return 'background:#EBF5FF;border:1.5px solid #9BB8E8'
+  if (store.calcError)                    return 'background:#FEF2F2;border:1.5px solid #FCA5A5'
+  if (store.isCalculated)                 return 'background:#F0FFF4;border:1.5px solid #6EE7B7'
+  return 'background:#F5F5F5;border:1.5px solid #E2E8F0'
 })
 </script>

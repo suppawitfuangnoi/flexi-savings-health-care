@@ -51,7 +51,7 @@
           <rect x="4" y="2" width="16" height="20" rx="2"/>
           <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/>
         </svg>
-        <p class="text-sm font-semibold" style="color:#AAAAAA">กรอกข้อมูลด้านบนแล้วกด "คำนวณเบี้ยประกัน"</p>
+        <p class="text-sm font-semibold" style="color:#AAAAAA">กรอกข้อมูลด้านบน — ระบบจะคำนวณให้อัตโนมัติ</p>
         <p class="text-[11px] mt-1" style="color:#CCCCCC">ตารางผลประโยชน์และสถานการณ์สุขภาพจะแสดงที่นี่</p>
       </div>
 
