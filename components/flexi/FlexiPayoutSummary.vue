@@ -17,10 +17,10 @@
       </p>
       <div class="mt-3 flex items-center gap-3 flex-wrap">
         <span class="flex items-center gap-1.5 text-[11px]" style="color:rgba(255,255,255,0.45)">
-          <span style="color:#FCA5A5;font-weight:700">−฿{{ fmt(r.totalPremium) }}</span> จ่ายเบี้ยรวม
+          <span style="color:#FCA5A5;font-weight:700">−฿{{ fmt(r?.totalPremium ?? 0) }}</span> จ่ายเบี้ยรวม
         </span>
         <span style="color:rgba(255,255,255,0.2)">·</span>
-        <span class="text-[11px]" style="color:rgba(255,255,255,0.40)">ทุนประกัน ฿{{ fmt(r.sa) }}</span>
+        <span class="text-[11px]" style="color:rgba(255,255,255,0.40)">ทุนประกัน ฿{{ fmt(r?.sumAssured ?? 0) }}</span>
       </div>
     </div>
 
@@ -30,23 +30,23 @@
       <!-- Tax benefit -->
       <div
         class="px-4 py-4"
-        :style="`border-right:1px solid #E2E8F0;background:${store.taxRate > 0 ? '#F0FBF4' : '#FAFAFA'}`"
+        :style="`border-right:1px solid #E2E8F0;background:${(store.selectedTaxOption?.rate ?? 0) > 0 ? '#F0FBF4' : '#FAFAFA'}`"
       >
         <div class="flex items-center gap-1.5 mb-2">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-            :stroke="store.taxRate > 0 ? '#0A8A4C' : '#CCCCCC'"
+            :stroke="(store.selectedTaxOption?.rate ?? 0) > 0 ? '#0A8A4C' : '#CCCCCC'"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
           >
             <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
           </svg>
           <p
             class="text-[10px] font-bold uppercase tracking-wider"
-            :style="`color:${store.taxRate > 0 ? '#0A8A4C' : '#BBBBBB'}`"
+            :style="`color:${(store.selectedTaxOption?.rate ?? 0) > 0 ? '#0A8A4C' : '#BBBBBB'}`"
           >ประโยชน์ทางภาษี</p>
         </div>
-        <template v-if="store.taxRate > 0">
+        <template v-if="(store.selectedTaxOption?.rate ?? 0) > 0">
           <p class="text-[22px] font-extrabold leading-none" style="color:#0A8A4C">+฿{{ fmt(taxSaving) }}</p>
-          <p class="text-[10px] mt-1.5 font-semibold" style="color:#6EE7B7">ประหยัดได้/ปี · อัตรา {{ store.taxRate }}%</p>
+          <p class="text-[10px] mt-1.5 font-semibold" style="color:#6EE7B7">ประหยัดได้/ปี · อัตรา {{ Math.round((store.selectedTaxOption?.rate ?? 0) * 100) }}%</p>
           <span class="inline-block mt-2 px-3 py-1 rounded-full text-[10px] font-bold" style="background:#FFF8E1;color:#D97706">
             ประกันสะสมทรัพย์ลดหย่อนภาษีได้ทุกปีสูงสุด 100,000 บาท (ตามที่กฎหมายกำหนด)
           </span>
@@ -98,7 +98,7 @@
 
     <!-- Minor remark (age ≤ 18) -->
     <div
-      v-if="store.age <= 18"
+      v-if="store.age !== null && store.age <= 18"
       class="px-5 py-3 flex items-start gap-2"
       style="background:#EBF0FA;border-top:1px solid #CBD5E1"
     >
@@ -113,41 +113,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { fmt, getIllness, costUsed, benefitAtYear, balanceBeforeScenario } from '~/utils/flexiCalc'
+import { fmt } from '~/utils/flexiCalc'
 
 const store = useFlexiCalculatorStore()
-const r     = computed(() => store.result)
+const r     = computed(() => store.premiumResult)
 
-// ─── Computed values ──────────────────────────────────────────────────────────
-const maxAccumulated = computed(() =>
-  benefitAtYear(12, store.scenarios, r.value.healthPerYear, store.hospitalPct, store.customIllCost))
-
-const noClaimBonusAdj = computed(() => maxAccumulated.value * 0.20)
-
-const totalReceivedAdj = computed(() =>
-  r.value.maturity + r.value.totalCash + maxAccumulated.value + noClaimBonusAdj.value
-)
-
-const taxSaving = computed(() =>
-  store.taxRate > 0
-    ? Math.min(r.value.annualPremium, 100000) * (store.taxRate / 100)
-    : 0
-)
-
-const totalOutOfPocket = computed(() => {
-  const totalCost = store.scenarios.reduce((sum, sc) => {
-    const ill = getIllness(sc.illIdx, sc.list)
-    return sum + costUsed(ill, store.hospitalPct, store.customIllCost)
-  }, 0)
-  const covered = store.scenarios.reduce((sum, sc, idx) => {
-    const avail = balanceBeforeScenario(idx, store.scenarios, r.value.healthPerYear, store.hospitalPct, store.customIllCost)
-    const ill   = getIllness(sc.illIdx, sc.list)
-    return sum + Math.min(costUsed(ill, store.hospitalPct, store.customIllCost), avail)
-  }, 0)
-  return Math.max(0, totalCost - covered)
-})
-
-const netGainLossAdj = computed(() =>
-  totalReceivedAdj.value - r.value.totalPremium - totalOutOfPocket.value
-)
+const totalReceivedAdj = computed(() => store.totalReceivedAdj)
+const taxSaving        = computed(() => store.taxSaving)
+const netGainLossAdj   = computed(() => store.netGainLossAdj)
 </script>

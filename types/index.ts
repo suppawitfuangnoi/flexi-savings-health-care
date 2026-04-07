@@ -47,12 +47,17 @@ export interface ClientPersonalInfo {
 // ─── Flexi Calculator ────────────────────────────────────────────────────────
 
 export type InputMode    = 'premium' | 'sa' | 'health'
-export type ScenarioList = 'general' | 'children'
+export type ScenarioList = 'adult' | 'children'
 
 export interface Scenario {
-  year:    number
-  illIdx:  number
-  list:    ScenarioList
+  year:       number
+  scenarioId: number
+  name:       string
+  nameEn:     string
+  cost:       number
+  isCustom:   boolean
+  category:   ScenarioList
+  icon:       string
 }
 
 export interface Illness {

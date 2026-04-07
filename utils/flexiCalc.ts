@@ -155,8 +155,6 @@ export function benefitAtYear(
   y: number,
   scenarios: Scenario[],
   healthPerYear: number,
-  hospitalPct: number,
-  customIllCost: number,
 ): number {
   let balance = 0
   for (let yr = 1; yr <= y; yr++) {
@@ -164,7 +162,7 @@ export function benefitAtYear(
     scenarios
       .filter(s => s.year === yr)
       .forEach(s => {
-        balance = Math.max(0, balance - costUsed(getIllness(s.illIdx, s.list), hospitalPct, customIllCost))
+        balance = Math.max(0, balance - s.cost)
       })
   }
   return balance
@@ -178,8 +176,6 @@ export function balanceBeforeScenario(
   idx: number,
   scenarios: Scenario[],
   healthPerYear: number,
-  hospitalPct: number,
-  customIllCost: number,
 ): number {
   const sc = scenarios[idx]
   let balance = 0
@@ -188,7 +184,7 @@ export function balanceBeforeScenario(
     const yearScens = scenarios.filter(s => s.year === yr)
     for (const s of yearScens) {
       if (s === sc) break
-      balance = Math.max(0, balance - costUsed(getIllness(s.illIdx, s.list), hospitalPct, customIllCost))
+      balance = Math.max(0, balance - s.cost)
     }
   }
   return balance

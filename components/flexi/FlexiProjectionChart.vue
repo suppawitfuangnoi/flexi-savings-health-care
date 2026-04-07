@@ -40,41 +40,21 @@ import {
   Filler, Tooltip, Legend,
 } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { ILLNESSES, CHILDREN_ILLNESSES } from '~/constants/illnesses'
-import { fmt } from '~/utils/flexiCalc'
-import type { Illness, ScenarioList } from '~/types'
+import { fmt, benefitAtYear } from '~/utils/flexiCalc'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
 const store = useFlexiCalculatorStore()
 
-function getIllness(illIdx: number, list: ScenarioList): Illness {
-  const arr = list === 'children' ? CHILDREN_ILLNESSES : ILLNESSES
-  return arr[illIdx] ?? arr[0]
-}
-
-function costUsed(ill: Illness): number {
-  if (ill.min === 0 && ill.max === 0) return store.customIllCost
-  return Math.round(ill.min + (ill.max - ill.min) * store.hospitalPct)
-}
-
-function benefitAtYear(y: number): number {
-  const r = store.result
-  let balance = 0
-  for (let yr = 1; yr <= y; yr++) {
-    balance += r.healthPerYear
-    store.scenarios.filter(s => s.year === yr).forEach(s => {
-      const ill = getIllness(s.illIdx, s.list)
-      balance = Math.max(0, balance - costUsed(ill))
-    })
-  }
-  return balance
+function _benefitAtYear(y: number): number {
+  return benefitAtYear(y, store.scenarios, store.healthPerYear)
 }
 
 const chartData = computed(() => {
-  const r              = store.result
-  const taxSavingTotal = store.taxRate > 0
-    ? Math.min(r.annualPremium, 100000) * (store.taxRate / 100) * 6
+  const r = store.premiumResult
+  if (!r) return { labels: [], datasets: [] }
+  const taxSavingTotal = (store.selectedTaxOption?.rate ?? 0) > 0
+    ? Math.min(r.annualPremium, 100000) * (store.selectedTaxOption!.rate) * 6
     : 0
   const years = Array.from({ length: 12 }, (_, i) => i + 1)
 
@@ -95,7 +75,7 @@ const chartData = computed(() => {
       {
         label: 'ผลประโยชน์รวม',
         data: years.map(y =>
-          r.cashReturn * y + benefitAtYear(y) + (y === 12 ? r.maturity + taxSavingTotal : 0)
+          r.cashReturn * y + _benefitAtYear(y) + (y === 12 ? r.maturity + taxSavingTotal : 0)
         ),
         borderColor: '#0066B3',
         borderWidth: 2.5,
@@ -106,7 +86,7 @@ const chartData = computed(() => {
       },
       {
         label: 'วงเงินสุขภาพสะสม',
-        data: years.map(y => benefitAtYear(y)),
+        data: years.map(y => _benefitAtYear(y)),
         borderColor: '#E67E22',
         borderWidth: 1.5,
         borderDash: [3, 2],

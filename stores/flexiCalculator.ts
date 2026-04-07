@@ -1,21 +1,20 @@
 /**
  * stores/flexiCalculator.ts
- * Pinia store for the Flexi Calculator modal.
- * Owns all calculator state: input mode, scenarios, hospital selection.
- *
- * Replaces the ~20 useState() calls from FlexiCalculatorModal.tsx.
- * This store is ephemeral — it resets when the modal closes.
+ * Pinia store for the Flexi Calculator.
+ * All data is API-driven. State is blank (null) until user completes setup and triggers calculation.
  */
 import { defineStore } from 'pinia'
-import {
-  compute, saFromMode, dobFromAge, ageFromDob,
-  CONTRACT_YEARS, PAYMENT_YEARS, HEALTH_BENEFIT_PCT, CASH_RETURN_PCT, NO_CLAIM_BONUS_PCT,
-  getIllness, costUsed, benefitAtYear,
-} from '~/utils/flexiCalc'
-import { HOSPITALS, ILLNESSES, CHILDREN_ILLNESSES } from '~/constants/illnesses'
-import type { InputMode, ScenarioList, Scenario, FlexiComputeResult } from '~/types'
+import { dobFromAge, ageFromDob, CONTRACT_YEARS, benefitAtYear, balanceBeforeScenario } from '~/utils/flexiCalc'
+import { calculatePremium }  from '~/services/premiumService'
+import { getTaxOptions }     from '~/services/taxService'
+import { getHospitals, getScenarios } from '~/services/hospitalService'
+import { getBenefitTable }   from '~/services/benefitService'
+import type { InputMode, Scenario } from '~/types'
+import type {
+  PremiumCalcResponse, BenefitTableResponse,
+  ApiHospital, ApiScenario, TaxOption, ApiScenarioCategory,
+} from '~/types/api'
 
-// Input-mode minimum values (mirrors MODE_CONFIG in FlexiCalculatorModal.tsx)
 const MODE_MIN: Record<InputMode, number> = {
   premium: 10_000,
   sa:      50_000,
@@ -23,108 +22,136 @@ const MODE_MIN: Record<InputMode, number> = {
 }
 
 interface FlexiCalculatorState {
-  // Patient setup
-  gender:       'M' | 'F'
-  age:          number
-  dob:          string
-
-  // Input
+  // ── Setup ─────────────────────────────────────────────────────────────────
+  gender:       'M' | 'F' | null
+  age:          number | null
+  dob:          string | null
+  // ── Input ─────────────────────────────────────────────────────────────────
   inputMode:    InputMode
-  primaryValue: number
-
-  // Scenarios
-  scenarios:       Scenario[]
-  pendingYear:     number
-  pendingIllIdx:   number
-  illnessTab:      ScenarioList
-  pendingList:     ScenarioList
-  scenarioMode:    'year-first' | 'amount-first'
-  amountInput:     number
-  customIllCost:   number
-
-  // Hospital & tax
-  selectedHospital:     number
+  primaryValue: number | null
+  // ── Calculation state ─────────────────────────────────────────────────────
+  isCalculated:    boolean
+  loadingCalc:     boolean
+  loadingHospitals: boolean
+  loadingScenarios: boolean
+  // ── API results ───────────────────────────────────────────────────────────
+  premiumResult:     PremiumCalcResponse | null
+  benefitTable:      BenefitTableResponse | null
+  apiHospitals:      ApiHospital[]
+  adultScenarios:    ApiScenario[]
+  childrenScenarios: ApiScenario[]
+  taxOptions:        TaxOption[]
+  selectedTaxOption: TaxOption | null
+  // ── Scenarios ─────────────────────────────────────────────────────────────
+  scenarios:         Scenario[]
+  pendingYear:       number
+  pendingScenarioId: number | null
+  illnessTab:        ApiScenarioCategory
+  scenarioMode:      'year-first' | 'amount-first'
+  amountInput:       number
+  customIllCost:     number
+  // ── Hospital ──────────────────────────────────────────────────────────────
+  selectedHospitalId:   number | null
   hospitalDropdownOpen: boolean
-  taxRate:              number
-
-  // UI
-  benefitExpanded:  boolean
-  illnessExpanded:  boolean
-  projectionView:   'table' | 'chart'
+  // ── UI ────────────────────────────────────────────────────────────────────
+  benefitExpanded: boolean
+  illnessExpanded: boolean
+  projectionView:  'table' | 'chart'
 }
 
 export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
   state: (): FlexiCalculatorState => ({
-    gender:        'M',
-    age:           35,
-    dob:           dobFromAge(35),
-    inputMode:     'health',
-    primaryValue:  50_000,
-    scenarios:     [],
-    pendingYear:   1,
-    pendingIllIdx: 0,
-    illnessTab:    'general',
-    pendingList:   'general',
-    scenarioMode:  'year-first',
-    amountInput:   0,
-    customIllCost: 0,
-    selectedHospital:     3, // default Phyathai — index 3 in HOSPITALS array
+    gender:       null,
+    age:          null,
+    dob:          null,
+    inputMode:    'health',
+    primaryValue: null,
+
+    isCalculated:    false,
+    loadingCalc:     false,
+    loadingHospitals: false,
+    loadingScenarios: false,
+
+    premiumResult:     null,
+    benefitTable:      null,
+    apiHospitals:      [],
+    adultScenarios:    [],
+    childrenScenarios: [],
+    taxOptions:        [],
+    selectedTaxOption: null,
+
+    scenarios:         [],
+    pendingYear:       1,
+    pendingScenarioId: null,
+    illnessTab:        'adult',
+    scenarioMode:      'year-first',
+    amountInput:       0,
+    customIllCost:     0,
+
+    selectedHospitalId:   null,
     hospitalDropdownOpen: false,
-    taxRate:       0,
-    benefitExpanded:  false,
-    illnessExpanded:  false,
-    projectionView:   'table',
+
+    benefitExpanded: false,
+    illnessExpanded: false,
+    projectionView:  'table',
   }),
 
   getters: {
-    /** Derived SA from the current input mode and value. */
-    sa: (state): number => saFromMode(state.inputMode, state.primaryValue, state.age),
+    selectedHospital: (state): ApiHospital | null =>
+      state.apiHospitals.find(h => h.id === state.selectedHospitalId) ?? null,
 
-    /** Hospital cost multiplier for the selected hospital. */
-    hospitalPct: (state): number => HOSPITALS[state.selectedHospital]?.pct ?? 1,
-
-    /** Core benefit computation result. */
-    result(): FlexiComputeResult {
-      return compute(this.sa, this.age, 0)
+    healthPerYear(): number {
+      return this.premiumResult?.healthPerYear ?? 0
     },
 
-    /** Year-by-year projection (12 rows). */
-    yearlyData(): Array<{ year: number; cashReturn: number; healthBenefit: number; accumulated: number; premiumPaid: number }> {
-      const r = this.result
-      return Array.from({ length: CONTRACT_YEARS }, (_, i) => {
-        const year      = i + 1
-        const cash      = r.cashReturn * year
-        const health    = r.healthPerYear * year
-        const premium   = r.annualPremium * Math.min(year, PAYMENT_YEARS)
-        return {
-          year,
-          cashReturn:    r.cashReturn,
-          healthBenefit: r.healthPerYear,
-          accumulated:   cash + health,
-          premiumPaid:   premium,
-        }
-      })
+    currentTabScenarios(): ApiScenario[] {
+      return this.illnessTab === 'adult' ? this.adultScenarios : this.childrenScenarios
     },
 
-    /** Cost of a scenario based on selected hospital pct and illness cost range. */
-    scenarioCost(): (illMin: number, illMax: number) => number {
-      const pct = this.hospitalPct
-      return (illMin: number, illMax: number) =>
-        Math.round(illMin + (illMax - illMin) * pct)
-    },
-
-    /** Running balance at year 12 after all scenario deductions × NO_CLAIM_BONUS_PCT. */
     noClaimBonusAdj(): number {
-      const r = this.result
-      return benefitAtYear(CONTRACT_YEARS, this.scenarios, r.healthPerYear, this.hospitalPct, this.customIllCost) * NO_CLAIM_BONUS_PCT
+      return benefitAtYear(CONTRACT_YEARS, this.scenarios, this.healthPerYear) * 0.20
     },
 
-    /** Total illness cost across all scenarios (at the selected hospital). */
     totalScenarioCost(): number {
-      return this.scenarios.reduce((sum, s) => {
-        const ill = getIllness(s.illIdx, s.list)
-        return sum + costUsed(ill, this.hospitalPct, this.customIllCost)
-      }, 0)
+      return this.scenarios.reduce((sum, s) => sum + s.cost, 0)
+    },
+
+    taxSaving(): number {
+      if (!this.selectedTaxOption || this.selectedTaxOption.rate === 0 || !this.premiumResult) return 0
+      const deductible = Math.min(this.premiumResult.annualPremium, this.selectedTaxOption.maxDeductible)
+      return Math.round(deductible * this.selectedTaxOption.rate)
+    },
+
+    totalOutOfPocket(): number {
+      let out = 0
+      this.scenarios.forEach((sc, idx) => {
+        const avail = balanceBeforeScenario(idx, this.scenarios, this.healthPerYear)
+        out += Math.max(0, sc.cost - avail)
+      })
+      return out
+    },
+
+    totalReceivedAdj(): number {
+      if (!this.premiumResult) return 0
+      const maxAccum    = benefitAtYear(CONTRACT_YEARS, this.scenarios, this.healthPerYear)
+      const noClaimBonus = maxAccum * 0.20
+      return this.premiumResult.maturity
+        + this.premiumResult.cashReturn * CONTRACT_YEARS
+        + maxAccum + noClaimBonus
+    },
+
+    netGainLossAdj(): number {
+      if (!this.premiumResult) return 0
+      return this.totalReceivedAdj - this.premiumResult.totalPremium - this.totalOutOfPocket
+    },
+
+    canCalculate(): boolean {
+      return (
+        this.gender !== null &&
+        this.age !== null && this.age > 0 &&
+        this.primaryValue !== null &&
+        this.primaryValue >= MODE_MIN[this.inputMode]
+      )
     },
   },
 
@@ -141,32 +168,105 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     },
 
     switchMode(newMode: InputMode) {
-      // Carry the equivalent value into the new mode, clamped to mode minimum
-      const r = this.result
+      if (!this.premiumResult) {
+        this.inputMode = newMode
+        return
+      }
       const valueMap: Record<InputMode, number> = {
-        premium: r.annualPremium,
-        sa:      r.sa,
-        health:  r.healthPerYear,
+        premium: this.premiumResult.annualPremium,
+        sa:      this.premiumResult.sumAssured,
+        health:  this.premiumResult.healthPerYear,
       }
       this.inputMode    = newMode
       this.primaryValue = Math.max(MODE_MIN[newMode], Math.round(valueMap[newMode]))
     },
 
-    addScenario(scenario: Scenario) {
-      // Guard: custom illness requires a positive cost
-      const customIdx = scenario.list === 'children'
-        ? CHILDREN_ILLNESSES.length - 1
-        : ILLNESSES.length - 1
-      if (scenario.illIdx === customIdx && this.customIllCost <= 0) return
-
-      // Prevent duplicate (same year + same illness + same list)
-      const exists = this.scenarios.some(
-        s => s.year === scenario.year && s.illIdx === scenario.illIdx && s.list === scenario.list,
-      )
-      if (!exists) {
-        // React appends without sorting — preserve insertion order
-        this.scenarios.push(scenario)
+    async calculate() {
+      if (!this.canCalculate) return
+      this.loadingCalc = true
+      try {
+        const premRes = await calculatePremium({
+          age:       this.age!,
+          gender:    this.gender!,
+          inputMode: this.inputMode,
+          value:     this.primaryValue!,
+        })
+        const tableRes = await getBenefitTable({
+          age:           this.age!,
+          gender:        this.gender!,
+          sumAssured:    premRes.sumAssured,
+          annualPremium: premRes.annualPremium,
+          healthPerYear: premRes.healthPerYear,
+        })
+        this.scenarios    = []
+        this.premiumResult = premRes
+        this.benefitTable  = tableRes
+        this.isCalculated  = true
+        // Auto-fetch scenarios for selected hospital
+        if (this.selectedHospitalId) {
+          await Promise.all([
+            this.fetchScenarios(this.selectedHospitalId, 'adult'),
+            this.fetchScenarios(this.selectedHospitalId, 'children'),
+          ])
+        }
+      } finally {
+        this.loadingCalc = false
       }
+    },
+
+    async fetchHospitals() {
+      this.loadingHospitals = true
+      try {
+        const res = await getHospitals()
+        this.apiHospitals = res.hospitals
+        if (res.hospitals.length > 0 && !this.selectedHospitalId) {
+          // Default: index 3 = Phyathai (same as before)
+          const phyathai = res.hospitals.find(h => h.short === 'Phyathai')
+          this.selectedHospitalId = phyathai?.id ?? res.hospitals[0].id
+        }
+      } finally {
+        this.loadingHospitals = false
+      }
+    },
+
+    async fetchTaxOptions() {
+      const res = await getTaxOptions()
+      this.taxOptions        = res.options
+      this.selectedTaxOption = res.options.find(o => o.rate === 0) ?? null
+    },
+
+    async fetchScenarios(hospitalId: number, category: ApiScenarioCategory) {
+      this.loadingScenarios = true
+      try {
+        const res = await getScenarios(hospitalId, category)
+        if (category === 'adult')    this.adultScenarios    = res.scenarios
+        else                         this.childrenScenarios = res.scenarios
+        // Auto-select first non-custom scenario
+        if (!this.pendingScenarioId || this.illnessTab === category) {
+          const first = res.scenarios.find(s => !s.isCustom)
+          if (first) this.pendingScenarioId = first.id
+        }
+      } finally {
+        this.loadingScenarios = false
+      }
+    },
+
+    async selectHospital(hospitalId: number) {
+      this.selectedHospitalId   = hospitalId
+      this.hospitalDropdownOpen = false
+      this.scenarios = []
+      await Promise.all([
+        this.fetchScenarios(hospitalId, 'adult'),
+        this.fetchScenarios(hospitalId, 'children'),
+      ])
+    },
+
+    addScenario(scenario: Scenario) {
+      if (scenario.isCustom && scenario.cost <= 0) return
+      const exists = this.scenarios.some(
+        s => s.year === scenario.year && s.scenarioId === scenario.scenarioId,
+      )
+      if (!exists) this.scenarios.push(scenario)
     },
 
     removeScenario(index: number) {

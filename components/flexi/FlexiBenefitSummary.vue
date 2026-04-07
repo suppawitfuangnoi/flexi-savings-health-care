@@ -1,8 +1,7 @@
 <!--
   FlexiBenefitSummary.vue
-  Collapsible "Health Benefit" section with bar chart, hospital selector,
-  illness grid and add-scenario button.
-  Pixel-perfect port of React FlexiCalculatorModal.tsx lines ~700–1150.
+  Collapsible health benefit calculator. Uses API-driven hospitals/scenarios.
+  Shown only after premium has been calculated (store.isCalculated).
 -->
 <template>
   <div class="rounded-xl overflow-hidden" style="border:1.5px solid #9BB8E8">
@@ -13,7 +12,6 @@
       :style="`background:#EBF0FA;border-bottom:${store.benefitExpanded ? '1px solid #9BB8E8' : 'none'}`"
       @click="store.benefitExpanded = !store.benefitExpanded"
     >
-      <!-- HeartPulse icon (lucide) -->
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0066B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
         <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
         <path d="M3.22 12H9.5l1.5-3 2 4.5 1.5-3h4.28"/>
@@ -27,7 +25,6 @@
           <span style="color:#9BB8E8"> — คลิกเพื่อขยาย</span>
         </p>
       </div>
-      <!-- ChevronDown icon -->
       <svg
         width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0066B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
         class="shrink-0 transition-transform"
@@ -40,7 +37,7 @@
     <!-- Expanded content -->
     <div v-show="store.benefitExpanded" class="p-5 space-y-4 bg-white">
 
-      <!-- Mode toggle: year-first / amount-first -->
+      <!-- Mode toggle -->
       <div class="flex rounded-xl overflow-hidden" style="border:1.5px solid #E2E8F0">
         <button
           v-for="m in SCENARIO_MODES"
@@ -56,14 +53,12 @@
         </button>
       </div>
 
-      <!-- ═══════════════ YEAR-FIRST MODE ═══════════════ -->
+      <!-- ═══ YEAR-FIRST MODE ═══ -->
       <template v-if="store.scenarioMode === 'year-first'">
 
-        <!-- Step 1: Pick a year from bar chart -->
+        <!-- Step 1: Year from bar chart -->
         <div>
-          <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">
-            1. เลือกปี / Select Year
-          </p>
+          <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">1. เลือกปี / Select Year</p>
           <div style="height:150px">
             <Bar :data="barData" :options="barOptions" />
           </div>
@@ -83,21 +78,18 @@
         <!-- Hospital dropdown -->
         <HospitalDropdown />
 
-        <!-- Step 2: Pick an illness -->
+        <!-- Step 2: Illness -->
         <div>
-          <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">
-            2. เลือกสถานการณ์ / Select Scenario
-          </p>
+          <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">2. เลือกสถานการณ์ / Select Scenario</p>
 
-          <!-- Illness tab switcher -->
+          <!-- Tab switcher -->
           <div class="flex rounded-xl overflow-hidden mb-2" style="border:1.5px solid #E2E8F0">
-            <!-- General tab -->
             <button
               class="flex-1 px-4 py-2 text-left transition-all flex items-center gap-2"
-              :style="store.illnessTab === 'general'
+              :style="store.illnessTab === 'adult'
                 ? 'background:#EBF0FA;border-right:1px solid #E2E8F0;color:#0066B3'
                 : 'background:#F8F8F8;border-right:1px solid #E2E8F0;color:#AAAAAA'"
-              @click="switchToTab('general')"
+              @click="switchToTab('adult')"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0 1 13 0"/>
@@ -107,9 +99,8 @@
                 <p class="text-[10px] mt-0.5" style="color:#BBBBBB">โรคสำหรับผู้ใหญ่</p>
               </div>
             </button>
-            <!-- Children tab (only shown when age ≤ 18) -->
             <button
-              v-if="store.age <= 18"
+              v-if="store.age !== null && store.age <= 18"
               class="flex-1 px-4 py-2 text-left transition-all flex items-center gap-2"
               :style="store.illnessTab === 'children'
                 ? 'background:#EBF0FA;color:#0066B3'
@@ -126,24 +117,29 @@
             </button>
           </div>
 
+          <!-- Loading state -->
+          <div v-if="store.loadingScenarios" class="flex justify-center py-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+          </div>
+
           <!-- Illness grid -->
           <IllnessGrid
-            :list="currentIllnesses"
-            :list-key="store.illnessTab"
+            v-else
+            :list="store.currentTabScenarios"
             :accent-color="store.illnessTab === 'children' ? '#0A8A4C' : '#0066B3'"
             :expandable="true"
-            :pending-ill-idx="store.pendingIllIdx"
-            :pending-list="store.pendingList"
+            :pending-scenario-id="store.pendingScenarioId"
             :custom-ill-cost="store.customIllCost"
-            :hospital-pct="store.hospitalPct"
             :illness-expanded="store.illnessExpanded"
-            @select="onIllnessSelect"
+            @select="onScenarioSelect"
             @toggle-expand="store.illnessExpanded = !store.illnessExpanded"
             @custom-cost="store.customIllCost = $event"
           />
         </div>
 
-        <!-- Step 3: Add scenario button -->
+        <!-- Add scenario button -->
         <button
           class="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
           :style="`background:${addBtnColor};color:#FFFFFF`"
@@ -151,27 +147,21 @@
           @mouseleave="($event.currentTarget as HTMLElement).style.background = addBtnColor"
           @click="addScenario"
         >
-          <!-- Plus icon -->
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          เพิ่มสถานการณ์นี้ — ปีที่ {{ store.pendingYear }} / {{ addBtnIllName }}
+          เพิ่มสถานการณ์นี้ — ปีที่ {{ store.pendingYear }} / {{ addBtnLabel }}
         </button>
 
       </template>
 
-      <!-- ═══════════════ AMOUNT-FIRST MODE ═══════════════ -->
+      <!-- ═══ AMOUNT-FIRST MODE ═══ -->
       <template v-else>
         <div class="space-y-4">
-
-          <!-- Hospital dropdown -->
           <HospitalDropdown />
 
-          <!-- Amount input -->
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">
-              ใส่วงเงิน / Enter Amount
-            </p>
+            <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">ใส่วงเงิน / Enter Amount</p>
             <div class="flex items-center gap-3 rounded-xl px-4 py-3" style="border:1.5px solid #9BB8E8;background:#EBF0FA">
               <span class="text-sm font-bold shrink-0" style="color:#0066B3">฿</span>
               <input
@@ -179,87 +169,67 @@
                 :min="0"
                 :step="10000"
                 :value="store.amountInput || undefined"
-                :placeholder="fmt(store.result.healthPerYear)"
+                :placeholder="store.healthPerYear > 0 ? fmt(store.healthPerYear) : '0'"
                 class="flex-1 text-base font-bold focus:outline-none bg-transparent"
                 style="color:#1A2B4A"
                 @input="store.amountInput = Math.max(0, +($event.target as HTMLInputElement).value || 0)"
               />
               <span
-                v-if="store.amountInput > 0 && store.result.healthPerYear > 0"
+                v-if="store.amountInput > 0 && store.healthPerYear > 0"
                 class="text-[11px] shrink-0 px-2 py-0.5 rounded-full"
                 style="background:#EBF0FA;color:#0066B3"
-              >
-                ≈ ปีที่ {{ Math.ceil(store.amountInput / store.result.healthPerYear) }}
-              </span>
+              >≈ ปีที่ {{ Math.ceil(store.amountInput / store.healthPerYear) }}</span>
             </div>
-            <p v-if="store.amountInput === 0" class="text-[11px] mt-1.5" style="color:#AAAAAA">
-              เช่น วงเงินปีที่ 1 = ฿{{ fmt(store.result.healthPerYear) }}, ปีที่ 5 = ฿{{ fmt(store.result.healthPerYear * 5) }}
+            <p v-if="store.amountInput === 0 && store.healthPerYear > 0" class="text-[11px] mt-1.5" style="color:#AAAAAA">
+              เช่น วงเงินปีที่ 1 = ฿{{ fmt(store.healthPerYear) }}, ปีที่ 5 = ฿{{ fmt(store.healthPerYear * 5) }}
             </p>
           </div>
 
-          <!-- Coverage check grid -->
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">
-              ครอบคลุมสถานการณ์ใด / Coverage Check
-            </p>
-            <CoverageGrid :amount="store.amountInput > 0 ? store.amountInput : store.result.healthPerYear" />
+            <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:#666666">ครอบคลุมสถานการณ์ใด / Coverage Check</p>
+            <CoverageGrid :amount="store.amountInput > 0 ? store.amountInput : store.healthPerYear" />
           </div>
-
         </div>
       </template>
 
-      <!-- Scenario list (year-first only) -->
+      <!-- Scenario list -->
       <template v-if="store.scenarioMode === 'year-first'">
         <div
           v-if="store.scenarios.length > 0"
           class="rounded-xl overflow-hidden"
           style="border:1.5px solid #E2E8F0"
         >
-          <!-- Header row -->
           <div
             class="grid gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
             style="grid-template-columns:44px 1fr 72px 72px 68px 28px;background:#F5F5F5;color:#999999"
           >
-            <span>ปีที่</span>
-            <span>สถานการณ์</span>
-            <span class="text-right">วงเงิน</span>
-            <span class="text-right">ค่ารักษา</span>
-            <span class="text-right">สถานะ</span>
-            <span />
+            <span>ปีที่</span><span>สถานการณ์</span>
+            <span class="text-right">วงเงิน</span><span class="text-right">ค่ารักษา</span>
+            <span class="text-right">สถานะ</span><span />
           </div>
-          <!-- Scenario rows -->
           <div
             v-for="(sc, idx) in store.scenarios"
             :key="idx"
             class="grid gap-1.5 px-3 py-3 items-center text-xs"
             style="grid-template-columns:44px 1fr 72px 72px 68px 28px;border-top:1px solid #F0F0F0"
           >
-            <!-- Year badge -->
-            <span
-              class="font-bold text-center px-1 py-0.5 rounded-lg text-[11px]"
-              style="background:#EBF0FA;color:#0066B3"
-            >ปี {{ sc.year }}</span>
-            <!-- Illness name -->
+            <span class="font-bold text-center px-1 py-0.5 rounded-lg text-[11px]" style="background:#EBF0FA;color:#0066B3">
+              ปี {{ sc.year }}
+            </span>
             <div>
-              <p class="font-semibold leading-tight text-[11px]" style="color:#1A2B4A">{{ getIllness(sc.illIdx, sc.list).name }}</p>
-              <p class="text-[10px]" style="color:#999999">{{ getIllness(sc.illIdx, sc.list).en }}</p>
+              <p class="font-semibold leading-tight text-[11px]" style="color:#1A2B4A">{{ sc.name }}</p>
+              <p class="text-[10px]" style="color:#999999">{{ sc.nameEn }}</p>
             </div>
-            <!-- Available balance -->
-            <p class="font-bold text-right" :style="`color:${scenarioStatusColor(idx).text}`">
+            <p class="font-bold text-right" :style="`color:${scenarioStatusColor(idx)}`">
               ฿{{ fmt(_balanceBeforeScenario(idx)) }}
             </p>
-            <!-- Cost -->
             <p class="text-right text-[10px] font-semibold" style="color:#555555">
-              ฿{{ fmt(_costUsed(getIllness(sc.illIdx, sc.list))) }}
+              ฿{{ fmt(sc.cost) }}
             </p>
-            <!-- Status badge -->
             <span
               class="text-[10px] font-bold text-right justify-self-end px-1.5 py-0.5 rounded-full whitespace-nowrap"
-              :style="`background:${scenarioStatusColor(idx).text};color:#fff`"
-            >
-              {{ scenarioStatusBadge(idx) }}
-            </span>
-            <!-- Delete button -->
+              :style="`background:${scenarioStatusColor(idx)};color:#fff`"
+            >{{ scenarioStatusBadge(idx) }}</span>
             <button
               class="flex items-center justify-center w-6 h-6 rounded-lg transition-colors"
               style="color:#BBBBBB"
@@ -267,9 +237,10 @@
               @mouseleave="($event.currentTarget as HTMLElement).style.color = '#BBBBBB'"
               @click="store.removeScenario(idx)"
             >
-              <!-- Trash2 icon -->
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6"/><path d="M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
               </svg>
             </button>
           </div>
@@ -286,62 +257,44 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { Bar } from 'vue-chartjs'
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip,
-} from 'chart.js'
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { ILLNESSES, CHILDREN_ILLNESSES } from '~/constants/illnesses'
-import {
-  fmt, getIllness, costUsed, benefitAtYear, balanceBeforeScenario,
-} from '~/utils/flexiCalc'
+import { fmt, benefitAtYear, balanceBeforeScenario } from '~/utils/flexiCalc'
 import HospitalDropdown from '~/components/flexi/HospitalDropdown.vue'
 import IllnessGrid      from '~/components/flexi/IllnessGrid.vue'
 import CoverageGrid     from '~/components/flexi/CoverageGrid.vue'
-import type { ScenarioList } from '~/types'
+import type { ApiScenarioCategory } from '~/types/api'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip)
 
 const store = useFlexiCalculatorStore()
 
-const r = computed(() => store.result)
+// Simplified wrappers — cost is now in scenario.cost, no hospitalPct needed
+const _benefitAtYear        = (y: number)   => benefitAtYear(y, store.scenarios, store.healthPerYear)
+const _balanceBeforeScenario = (idx: number) => balanceBeforeScenario(idx, store.scenarios, store.healthPerYear)
 
-const CUSTOM_ILL_IDX          = ILLNESSES.length - 1
-const CHILDREN_CUSTOM_ILL_IDX = CHILDREN_ILLNESSES.length - 1
-
-// Wrappers that bind store params — keeps call sites clean
-const _costUsed = (ill: ReturnType<typeof getIllness>) =>
-  costUsed(ill, store.hospitalPct, store.customIllCost)
-
-const _benefitAtYear = (y: number) =>
-  benefitAtYear(y, store.scenarios, r.value.healthPerYear, store.hospitalPct, store.customIllCost)
-
-const _balanceBeforeScenario = (idx: number) =>
-  balanceBeforeScenario(idx, store.scenarios, r.value.healthPerYear, store.hospitalPct, store.customIllCost)
-
-// ─── Scenario status helpers ──────────────────────────────────────────────────
-function scenarioStatusColor(idx: number): { text: string } {
+// Status helpers
+function scenarioStatusColor(idx: number): string {
   const sc    = store.scenarios[idx]
   const avail = _balanceBeforeScenario(idx)
-  const cost  = _costUsed(getIllness(sc.illIdx, sc.list))
-  if (avail >= cost) return { text: '#0A8A4C' }
-  if (avail > 0)    return { text: '#E67E22' }
-  return { text: '#E53E3E' }
+  if (avail >= sc.cost)  return '#0A8A4C'
+  if (avail > 0)          return '#E67E22'
+  return '#E53E3E'
 }
 
 function scenarioStatusBadge(idx: number): string {
   const sc    = store.scenarios[idx]
   const avail = _balanceBeforeScenario(idx)
-  const cost  = _costUsed(getIllness(sc.illIdx, sc.list))
-  if (avail >= cost) return '✓ ครบ'
-  if (avail > 0)    return '⚠ บางส่วน'
+  if (avail >= sc.cost)  return '✓ ครบ'
+  if (avail > 0)          return '⚠ บางส่วน'
   return '✗ ไม่ครบ'
 }
 
-// ─── Bar chart ────────────────────────────────────────────────────────────────
+// Bar chart
 const barData = computed(() => ({
   labels: Array.from({ length: 12 }, (_, i) => `ปี ${i + 1}`),
   datasets: [{
-    data: Array.from({ length: 12 }, (_, i) => _benefitAtYear(i + 1)),
+    data:            Array.from({ length: 12 }, (_, i) => _benefitAtYear(i + 1)),
     backgroundColor: Array.from({ length: 12 }, (_, i) =>
       store.pendingYear === i + 1 ? '#0066B3' : '#9BB8E8'),
     borderRadius: 4,
@@ -356,7 +309,7 @@ const barOptions = {
     tooltip: {
       callbacks: {
         title: (items: any[]) => `ปีที่ ${items[0].label.replace('ปี ', '')}`,
-        label: (item: any) => `฿${fmt(item.raw)}`,
+        label: (item: any)    => `฿${fmt(item.raw)}`,
       },
     },
   },
@@ -369,54 +322,59 @@ const barOptions = {
   },
 }
 
-// ─── Illness tab & grid ───────────────────────────────────────────────────────
+// Tabs
 const SCENARIO_MODES = [
   { key: 'year-first'   as const, label: 'ปีที่ → สถานการณ์',  sub: 'เลือกปี แล้วเพิ่มสถานการณ์' },
   { key: 'amount-first' as const, label: 'วงเงิน → ครอบคลุม', sub: 'ใส่จำนวนเงิน ดูว่าครอบคลุมอะไร' },
 ]
 
-const currentIllnesses = computed(() =>
-  store.illnessTab === 'general' ? ILLNESSES : CHILDREN_ILLNESSES)
-
-function switchToTab(tab: ScenarioList) {
-  store.illnessTab    = tab
-  store.pendingIllIdx = 0
-  store.pendingList   = tab
+function switchToTab(tab: ApiScenarioCategory) {
+  store.illnessTab     = tab
   store.illnessExpanded = false
+  // Auto-select first in new tab
+  const first = (tab === 'adult' ? store.adultScenarios : store.childrenScenarios).find(s => !s.isCustom)
+  if (first) store.pendingScenarioId = first.id
 }
 
-// Reset children tab when age exceeds 18 (mirrors React useEffect)
+// Reset children tab when age > 18
 watch(() => store.age, (newAge) => {
-  if (newAge > 18 && store.illnessTab === 'children') {
-    store.illnessTab    = 'general'
-    store.pendingList   = 'general'
-    store.pendingIllIdx = 0
+  if (newAge !== null && newAge > 18 && store.illnessTab === 'children') {
+    store.illnessTab        = 'adult'
+    store.pendingScenarioId = store.adultScenarios.find(s => !s.isCustom)?.id ?? null
   }
 })
 
-function onIllnessSelect(payload: { listKey: ScenarioList; idx: number }) {
-  store.pendingList   = payload.listKey
-  store.pendingIllIdx = payload.idx
+function onScenarioSelect(payload: { id: number; category: ApiScenarioCategory }) {
+  store.pendingScenarioId = payload.id
+  store.illnessTab        = payload.category
 }
 
-// ─── Add scenario ─────────────────────────────────────────────────────────────
-const addBtnColor = computed(() => store.pendingList === 'children' ? '#0A8A4C' : '#0066B3')
-const addBtnHover = computed(() => store.pendingList === 'children' ? '#06703D' : '#004F8C')
+// Add scenario
+const selectedApiScenario = computed(() =>
+  store.currentTabScenarios.find(s => s.id === store.pendingScenarioId) ?? null)
 
-const addBtnIllName = computed(() => {
-  const activeList = store.pendingList === 'children' ? CHILDREN_ILLNESSES : ILLNESSES
-  const customIdx  = store.pendingList === 'children' ? CHILDREN_CUSTOM_ILL_IDX : CUSTOM_ILL_IDX
-  const isCustom   = store.pendingIllIdx === customIdx
-  return isCustom
-    ? `กำหนดเอง ฿${store.customIllCost.toLocaleString()}`
-    : activeList[store.pendingIllIdx]?.name ?? ''
+const addBtnColor = computed(() => store.illnessTab === 'children' ? '#0A8A4C' : '#0066B3')
+const addBtnHover = computed(() => store.illnessTab === 'children' ? '#06703D' : '#004F8C')
+
+const addBtnLabel = computed(() => {
+  const s = selectedApiScenario.value
+  if (!s) return '—'
+  if (s.isCustom) return `กำหนดเอง ฿${store.customIllCost.toLocaleString()}`
+  return s.name
 })
 
 function addScenario() {
+  const s = selectedApiScenario.value
+  if (!s) return
   store.addScenario({
-    year:   store.pendingYear,
-    illIdx: store.pendingIllIdx,
-    list:   store.pendingList,
+    year:       store.pendingYear,
+    scenarioId: s.id,
+    name:       s.name,
+    nameEn:     s.nameEn,
+    cost:       s.isCustom ? store.customIllCost : s.estimatedCost,
+    isCustom:   s.isCustom,
+    category:   s.category,
+    icon:       s.icon,
   })
 }
 </script>

@@ -11,7 +11,7 @@
     <div class="px-5 py-3 flex items-center justify-between" style="background:#EBF0FA;border-bottom:1px solid #9BB8E8">
       <div>
         <p class="font-bold text-sm" style="color:#0066B3">ตารางแสดงผลประโยชน์ / Benefit Projection</p>
-        <p class="text-[11px]" style="color:#999999">ทุนประกัน ฿{{ fmt(r.sa) }} — ปีกรมธรรม์ 1–12</p>
+        <p class="text-[11px]" style="color:#999999">ทุนประกัน ฿{{ fmt(r?.sumAssured ?? 0) }} — ปีกรมธรรม์ 1–12</p>
       </div>
       <!-- View toggle -->
       <div class="flex rounded-lg overflow-hidden" style="border:1.5px solid #9BB8E8">
@@ -121,13 +121,13 @@
                 :style="`padding:8px 4px;text-align:center;font-size:11px;border-left:${y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'};border-bottom:1px solid #EBF0FA;min-width:64px;background:${y <= 6 ? (y % 2 === 0 ? '#F1FBF2' : '#FFFFFF') : (y % 2 === 0 ? '#FAFAFA' : '#FFFFFF')}`"
               >
                 <template v-if="y <= 6">
-                  <span style="font-weight:700;display:block;font-size:11px;color:#2E7D32">฿{{ fmt(r.annualPremium) }}</span>
+                  <span style="font-weight:700;display:block;font-size:11px;color:#2E7D32">฿{{ fmt(r?.annualPremium ?? 0) }}</span>
                   <span style="display:block;font-size:9px;color:#A5D6A7">ชำระเบี้ย</span>
                 </template>
                 <span v-else style="color:#DDDDDD;font-size:13px">—</span>
               </td>
               <td style="padding:8px 4px;text-align:center;font-size:11px;border-left:2px solid #F5AAAA;border-bottom:1px solid #EBF0FA;min-width:64px;background:#FFF0F0">
-                <span style="font-weight:700;display:block;color:#E53E3E;font-size:12px">-฿{{ fmt(r.totalPremium) }}</span>
+                <span style="font-weight:700;display:block;color:#E53E3E;font-size:12px">-฿{{ fmt(r?.totalPremium ?? 0) }}</span>
                 <span style="display:block;color:#999;font-size:9px">รวม 6 ปี</span>
               </td>
             </tr>
@@ -181,10 +181,10 @@
                 :style="`padding:8px 4px;text-align:center;font-size:11px;border-left:${y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'};border-bottom:1px solid #EBF0FA;min-width:64px;background:${y % 2 === 0 ? '#E3F4FF' : '#FFFFFF'}`"
               >
                 <span style="font-weight:700;color:#0277BD;font-size:11px">2%</span>
-                <span style="display:block;color:#999;font-size:9px">฿{{ fmt(r.cashReturn) }}</span>
+                <span style="display:block;color:#999;font-size:9px">฿{{ fmt(r?.cashReturn ?? 0) }}</span>
               </td>
               <td style="padding:8px 4px;text-align:center;font-size:11px;border-left:2px solid #9BB8E8;border-bottom:1px solid #EBF0FA;background:#E3F4FF">
-                <span style="font-weight:700;display:block;color:#0277BD;font-size:12px">฿{{ fmt(r.totalCash) }}</span>
+                <span style="font-weight:700;display:block;color:#0277BD;font-size:12px">฿{{ fmt((r?.cashReturn ?? 0) * 12) }}</span>
                 <span style="display:block;color:#999;font-size:9px">24% × ทุน</span>
               </td>
             </tr>
@@ -215,7 +215,7 @@
                     :key="j"
                     style="display:block;font-weight:700;line-height:1.2"
                     :style="`color:${statusColors[yd.coverageStatus ?? 'full'].text};font-size:9px`"
-                  >{{ getIllness(sc.illIdx, sc.list).name }}</span>
+                  >{{ sc.name }}</span>
                   <span
                     v-if="yd.totalCost > 0"
                     style="display:block;font-weight:600;font-size:9px"
@@ -275,7 +275,7 @@
               20% × วงเงินคงเหลือ <span class="font-bold" style="color:#B45309">฿{{ fmt(maxAccumulated) }}</span>
             </p>
             <p
-              v-if="maxAccumulated < r.healthPerYear * 12"
+              v-if="maxAccumulated < (r?.healthPerYear ?? 0) * 12"
               class="text-[10px] mt-0.5"
               style="color:#DC2626"
             >ลดลงจากสถานการณ์ที่เพิ่ม</p>
@@ -307,10 +307,10 @@
             <span class="text-[9px] font-bold px-2 py-0.5 rounded-full" style="background:#D1FAE5;color:#065F46">500% ทุนประกัน</span>
           </div>
           <p class="text-[10px] font-semibold leading-snug mb-1.5" style="color:#1E3A5F">เงินครบสัญญา</p>
-          <p class="text-2xl font-extrabold leading-none" style="color:#0A8A4C">฿{{ fmt(r.maturity) }}</p>
+          <p class="text-2xl font-extrabold leading-none" style="color:#0A8A4C">฿{{ fmt(r?.maturity ?? 0) }}</p>
           <div class="mt-2 rounded-lg px-3 py-1.5" style="background:rgba(0,0,0,0.04)">
             <p class="text-[10px]" style="color:#1E3A5F">
-              500% × ทุนประกัน <span class="font-bold" style="color:#2E5AAC">฿{{ fmt(r.sa) }}</span>
+              500% × ทุนประกัน <span class="font-bold" style="color:#2E5AAC">฿{{ fmt(r?.sumAssured ?? 0) }}</span>
             </p>
           </div>
         </div>
@@ -327,19 +327,20 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend,
 } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { fmt, getIllness, costUsed, benefitAtYear } from '~/utils/flexiCalc'
+import { fmt, benefitAtYear } from '~/utils/flexiCalc'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
 const store = useFlexiCalculatorStore()
 
-const r = computed(() => store.result)
+// Use premiumResult from API
+const r = computed(() => store.premiumResult)
 
-// Wrapper that binds store params — keeps template call sites clean
+// Simplified wrapper — cost is in scenario.cost, no hospitalPct needed
 const _benefitAtYear = (y: number) =>
-  benefitAtYear(y, store.scenarios, r.value.healthPerYear, store.hospitalPct, store.customIllCost)
+  benefitAtYear(y, store.scenarios, store.healthPerYear)
 
-// ─── Per-year data ────────────────────────────────────────────────────────────
+// Per-year data
 const statusColors: Record<string, { bg: string; text: string }> = {
   healthy: { bg: '#E3F2FD', text: '#2E5AAC' },
   full:    { bg: '#E8F5E9', text: '#0A8A4C' },
@@ -351,8 +352,8 @@ const yearData = computed(() => Array.from({ length: 12 }, (_, i) => {
   const y             = i + 1
   const yearScenarios = store.scenarios.filter(s => s.year === y)
   const hasScenario   = yearScenarios.length > 0
-  const totalCost     = yearScenarios.reduce((sum, sc) => sum + costUsed(getIllness(sc.illIdx, sc.list), store.hospitalPct, store.customIllCost), 0)
-  const healthAcc     = r.value.healthPerYear * y
+  const totalCost     = yearScenarios.reduce((sum, sc) => sum + sc.cost, 0)
+  const healthAcc     = store.healthPerYear * y
   const covered       = Math.min(totalCost, healthAcc)
   const outOfPocket   = Math.max(0, totalCost - healthAcc)
   const coverageStatus = hasScenario
@@ -364,90 +365,64 @@ const yearData = computed(() => Array.from({ length: 12 }, (_, i) => {
 const maxAccumulated  = computed(() => _benefitAtYear(12))
 const noClaimBonusAdj = computed(() => maxAccumulated.value * 0.20)
 
-// ─── Line chart data ──────────────────────────────────────────────────────────
+// Line chart
 const lineChartData = computed(() => {
-  const res            = store.result
-  const taxSavingTotal = store.taxRate > 0
-    ? Math.min(res.annualPremium, 100000) * (store.taxRate / 100) * 6
+  if (!r.value) return { labels: [], datasets: [] }
+  const res            = r.value
+  const taxSavingTotal = (store.selectedTaxOption?.rate ?? 0) > 0
+    ? Math.min(res.annualPremium, 100000) * (store.selectedTaxOption!.rate) * 6
     : 0
   const years = Array.from({ length: 12 }, (_, i) => i + 1)
-
   return {
     labels: years.map(y => `ปี ${y}`),
     datasets: [
       {
         label: 'เบี้ยสะสม',
-        data: years.map(y => Math.min(y, 6) * res.annualPremium),
-        borderColor: '#E53E3E',
-        borderWidth: 2,
-        borderDash: [5, 3],
-        backgroundColor: 'rgba(229,62,62,0.08)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
+        data:  years.map(y => Math.min(y, 6) * res.annualPremium),
+        borderColor: '#E53E3E', borderWidth: 2, borderDash: [5, 3],
+        backgroundColor: 'rgba(229,62,62,0.08)', fill: true, tension: 0.4, pointRadius: 0,
       },
       {
         label: 'ผลประโยชน์รวม',
-        data: years.map(y =>
-          res.cashReturn * y + _benefitAtYear(y) + (y === 12 ? res.maturity + taxSavingTotal : 0)
-        ),
-        borderColor: '#0066B3',
-        borderWidth: 2.5,
-        backgroundColor: 'rgba(0,102,179,0.10)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
+        data:  years.map(y => res.cashReturn * y + _benefitAtYear(y) + (y === 12 ? res.maturity + taxSavingTotal : 0)),
+        borderColor: '#0066B3', borderWidth: 2.5,
+        backgroundColor: 'rgba(0,102,179,0.10)', fill: true, tension: 0.4, pointRadius: 0,
       },
       {
         label: 'วงเงินสุขภาพสะสม',
-        data: years.map(y => _benefitAtYear(y)),
-        borderColor: '#E67E22',
-        borderWidth: 1.5,
-        borderDash: [3, 2],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
+        data:  years.map(y => _benefitAtYear(y)),
+        borderColor: '#E67E22', borderWidth: 1.5, borderDash: [3, 2],
+        backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0,
       },
       {
         label: 'เงินคืน 2% สะสม',
-        data: years.map(y => res.cashReturn * y),
-        borderColor: '#2196F3',
-        borderWidth: 1.5,
-        borderDash: [3, 2],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
+        data:  years.map(y => res.cashReturn * y),
+        borderColor: '#2196F3', borderWidth: 1.5, borderDash: [3, 2],
+        backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0,
       },
     ],
   }
 })
 
 const lineChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
+  responsive: true, maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
     tooltip: {
       callbacks: {
-        label: (ctx: any) => `฿${fmt(ctx.raw)}`,
+        label: (ctx: any)     => `฿${fmt(ctx.raw)}`,
         title: (items: any[]) => `ปีที่ ${items[0].label.replace('ปี ', '')}`,
       },
     },
   },
   scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 10 }, color: '#999' },
-    },
+    x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#999' } },
     y: {
       ticks: {
-        font: { size: 9 },
-        color: '#999',
+        font: { size: 9 }, color: '#999',
         callback: (v: any) => {
           if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
-          if (v >= 1_000) return `${Math.round(v / 1_000)}K`
+          if (v >= 1_000)     return `${Math.round(v / 1_000)}K`
           return String(v)
         },
       },
