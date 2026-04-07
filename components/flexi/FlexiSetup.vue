@@ -4,6 +4,10 @@
   tax rate selector, and "คำนวณเบี้ยประกัน" button.
   No default values — user must fill in all fields before calculating.
   Age is read-only — calculated automatically from date of birth only.
+
+  NOTE: v-calendar's built-in popover causes "parentNode" teleport errors in Nuxt SSR.
+  Solution: use DatePicker with :popover="false" (inline mode) + manual dropdown
+  controlled by calendarOpen ref + onClickOutside from @vueuse/core.
 -->
 <template>
   <div class="rounded-xl p-5 space-y-4" style="background:#EBF0FA;border:1.5px solid #9BB8E8">
@@ -30,54 +34,74 @@
         </div>
       </div>
 
-      <!-- DOB — v-calendar with พ.ศ. (Buddhist Era) popup, client-only -->
+      <!-- DOB — manual dropdown wrapping v-calendar in inline mode -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">วันเกิด / Date of Birth</label>
 
-        <!-- Client-side only: v-calendar DatePicker -->
         <ClientOnly>
-          <DatePicker
-            :model-value="dobAsDate"
-            locale="th-TH"
-            :max-date="new Date()"
-            :min-date="new Date(1900, 0, 1)"
-            color="blue"
-            @update:model-value="onDateSelect"
-          >
-            <!-- Override header title: show พ.ศ. year (+543) -->
-            <template #header-title="{ page }">
-              <span class="text-sm font-bold cursor-pointer" style="color:#1A2B4A">
-                {{ THAI_MONTHS[page.month - 1] }} {{ page.year + 543 }}
-              </span>
-            </template>
+          <!-- Wrapper: click-outside closes the calendar -->
+          <div ref="calendarWrap" class="relative">
 
-            <!-- Custom input trigger showing พ.ศ. -->
-            <template #default="{ togglePopover }">
-              <button
-                type="button"
-                class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
-                style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px;height:38px"
-                @click="togglePopover()"
+            <!-- Trigger button — shows formatBE() value -->
+            <button
+              type="button"
+              class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
+              :style="`background:#FFFFFF;border:1.5px solid ${calendarOpen ? '#0066B3' : '#9BB8E8'};color:#333333;padding:8px 10px;height:38px`"
+              @click="calendarOpen = !calendarOpen"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                :stroke="calendarOpen ? '#0066B3' : '#9BB8E8'"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span :style="dobAsDate ? 'color:#333333' : 'color:#AAAAAA'">
+                {{ dobAsDate ? formatBE(dobAsDate) : 'เลือกวันเกิด (พ.ศ.)' }}
+              </span>
+              <!-- Chevron -->
+              <svg
+                class="ml-auto shrink-0 transition-transform"
+                :class="calendarOpen ? 'rotate-180' : ''"
+                width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="#9BB8E8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
               >
-                <!-- Calendar icon -->
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BB8E8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                <span :style="dobAsDate ? 'color:#333333' : 'color:#AAAAAA'">
-                  {{ dobAsDate ? formatBE(dobAsDate) : 'เลือกวันเกิด (พ.ศ.)' }}
-                </span>
-              </button>
-            </template>
-          </DatePicker>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+
+            <!-- Calendar dropdown: DatePicker in inline mode (:popover="false") -->
+            <div
+              v-if="calendarOpen"
+              class="absolute z-50 rounded-xl overflow-hidden"
+              style="top:calc(100% + 4px);left:0;box-shadow:0 8px 32px rgba(0,102,179,0.18);border:1.5px solid #9BB8E8;background:#FFFFFF"
+            >
+              <DatePicker
+                :model-value="dobAsDate"
+                locale="th-TH"
+                :max-date="new Date()"
+                :min-date="new Date(1900, 0, 1)"
+                color="blue"
+                :popover="false"
+                @update:model-value="onDateSelect"
+              >
+                <!-- Override year in header: CE year + 543 = พ.ศ. -->
+                <template #header-title="{ page }">
+                  <span class="text-sm font-bold" style="color:#1A2B4A">
+                    {{ THAI_MONTHS[page.month - 1] }} {{ page.year + 543 }}
+                  </span>
+                </template>
+              </DatePicker>
+            </div>
+
+          </div>
 
           <!-- SSR fallback -->
           <template #fallback>
             <input
               type="date"
               :value="store.dob ?? ''"
-              class="w-full rounded-xl text-xs focus:outline-none transition-all"
+              class="w-full rounded-xl text-xs focus:outline-none"
               style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px;height:38px"
               @input="store.setDob(($event.target as HTMLInputElement).value)"
             />
@@ -89,26 +113,18 @@
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">อายุ / Age</label>
         <div
-          class="flex items-center justify-between rounded-xl px-3"
+          class="flex items-center gap-2 rounded-xl px-3"
           style="background:#FFFFFF;border:1.5px solid #9BB8E8;height:38px"
         >
           <span class="text-xl font-bold" style="color:#0066B3">
             {{ store.age ?? '—' }}
           </span>
-          <div class="flex items-center gap-1.5">
-            <span class="text-xs" style="color:#666666">
-              ปี
-              <template v-if="store.premiumResult">
-                · อัตรา {{ store.premiumResult.rate }}/พัน
-              </template>
-            </span>
-            <span
-              class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
-              style="background:#EBF0FA;color:#0066B3;border:1px solid #9BB8E8"
-            >
-              คำนวณอัตโนมัติ
-            </span>
-          </div>
+          <span class="text-xs" style="color:#666666">
+            ปี
+            <template v-if="store.premiumResult">
+              · อัตรา {{ store.premiumResult.rate }}/พัน
+            </template>
+          </span>
         </div>
       </div>
     </div>
@@ -277,7 +293,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { DatePicker } from 'v-calendar'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
@@ -287,25 +304,36 @@ import type { InputMode } from '~/types'
 
 const store = useFlexiCalculatorStore()
 
-// Thai month names for Buddhist Era header (+543 added to CE year)
+// ── Calendar dropdown state ──────────────────────────────────────────────
+const calendarOpen = ref(false)
+const calendarWrap = ref<HTMLElement | null>(null)
+
+// Close when clicking outside the calendar wrapper
+onClickOutside(calendarWrap, () => { calendarOpen.value = false })
+
+// ── Thai months for Buddhist Era header (CE year + 543) ─────────────────
 const THAI_MONTHS = [
   'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน',
   'พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม',
   'กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม',
 ]
 
-// Convert stored ISO string (ค.ศ.) → Date object for v-calendar model
+// ── Date model ───────────────────────────────────────────────────────────
+// Convert stored ISO string (ค.ศ.) → Date object for v-calendar
 const dobAsDate = computed<Date | null>(() =>
   store.dob ? new Date(store.dob) : null
 )
 
-// Called when user picks a date in the popup
 function onDateSelect(date: Date | null) {
   if (!date) return
   const iso = toISODate(date)
-  if (iso) store.setDob(iso)
+  if (iso) {
+    store.setDob(iso)
+    calendarOpen.value = false   // auto-close after selection
+  }
 }
 
+// ── Bidirectional tabs ───────────────────────────────────────────────────
 const isActiveMode = (mode: InputMode) => store.inputMode === mode
 
 const premiumTooLow = computed(() => {
