@@ -114,9 +114,15 @@
                     'Noto Sans Thai', 'IBM Plex Sans Thai', sans-serif;
 
   /* Border radius */
-  --vc-rounded: 0.75rem;
+  --vc-rounded:    0.75rem;
   --vc-rounded-lg: 0.75rem;
   --vc-rounded-xl: 0.75rem;
+
+  /* Weekday header text */
+  --vc-weekday-color: #0066B3;
+
+  /* Today dot color */
+  --vc-color-today: #0066B3;
 }
 
 /* Popup container */
@@ -126,9 +132,19 @@
   border-radius: 0.75rem !important;
 }
 
-/* Selected day */
-.vc-day .vc-highlights .vc-day-layer .vc-highlight {
-  background: #0066B3 !important;
+/* Calendar wrapper */
+.vc-container {
+  border-radius: 0.75rem !important;
+  font-family: var(--vc-font-family) !important;
+}
+
+/* Selected day highlight */
+.vc-highlight {
+  background-color: #0066B3 !important;
+}
+.vc-highlight-content-solid {
+  background-color: #0066B3 !important;
+  color: #FFFFFF !important;
 }
 
 /* Today indicator */
@@ -138,12 +154,32 @@
 }
 
 /* Navigation arrows */
-.vc-nav-arrow svg {
+.vc-arrow {
   color: #0066B3 !important;
 }
+.vc-arrow:hover {
+  background: #EBF0FA !important;
+}
 
-/* Header title */
+/* Header title button — now overridden by #header-title slot in Vue */
 .vc-title {
   color: #1A2B4A !important;
   font-weight: 700 !important;
+  pointer-events: none;
+}
+.vc-title-wrapper button {
+  cursor: default !important;
+}
+
+/* Weekday labels */
+.vc-weekday {
+  color: #0066B3 !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+}
+
+/* Day number hover */
+.vc-day-content:hover {
+  background: #EBF0FA !important;
+  color: #0066B3 !important;
 }

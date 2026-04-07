@@ -38,17 +38,25 @@
         <ClientOnly>
           <DatePicker
             :model-value="dobAsDate"
-            locale="th-TH-u-ca-buddhist"
+            locale="th-TH"
             :max-date="new Date()"
             :min-date="new Date(1900, 0, 1)"
             color="blue"
             @update:model-value="onDateSelect"
           >
-            <template #default="{ togglePopover, inputValue }">
+            <!-- Override header title: show พ.ศ. year (+543) -->
+            <template #header-title="{ page }">
+              <span class="text-sm font-bold cursor-pointer" style="color:#1A2B4A">
+                {{ THAI_MONTHS[page.month - 1] }} {{ page.year + 543 }}
+              </span>
+            </template>
+
+            <!-- Custom input trigger showing พ.ศ. -->
+            <template #default="{ togglePopover }">
               <button
                 type="button"
                 class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
-                style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px"
+                style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px;height:38px"
                 @click="togglePopover()"
               >
                 <!-- Calendar icon -->
@@ -64,13 +72,13 @@
             </template>
           </DatePicker>
 
-          <!-- SSR fallback slot -->
+          <!-- SSR fallback -->
           <template #fallback>
             <input
               type="date"
               :value="store.dob ?? ''"
               class="w-full rounded-xl text-xs focus:outline-none transition-all"
-              style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px"
+              style="background:#FFFFFF;border:1.5px solid #9BB8E8;color:#333333;padding:8px 10px;height:38px"
               @input="store.setDob(($event.target as HTMLInputElement).value)"
             />
           </template>
@@ -81,8 +89,8 @@
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">อายุ / Age</label>
         <div
-          class="flex items-center justify-between rounded-xl px-3 py-2"
-          style="background:#FFFFFF;border:1.5px solid #9BB8E8;min-height:38px"
+          class="flex items-center justify-between rounded-xl px-3"
+          style="background:#FFFFFF;border:1.5px solid #9BB8E8;height:38px"
         >
           <span class="text-xl font-bold" style="color:#0066B3">
             {{ store.age ?? '—' }}
@@ -168,7 +176,6 @@
               @input="store.primaryValue = Math.max(MODE_CONFIG[mode].min, +($event.target as HTMLInputElement).value || MODE_CONFIG[mode].min)"
             />
           </template>
-          <!-- After calc: show computed values for inactive tabs -->
           <template v-else-if="store.premiumResult">
             <p class="text-base font-bold tracking-tight" style="color:#1A2B4A">฿{{ fmt(modeDisplay(mode)) }}</p>
           </template>
@@ -211,7 +218,6 @@
           เลือกอัตราภาษีของคุณ
         </span>
       </div>
-      <!-- Tax option buttons from API -->
       <div class="flex flex-wrap gap-1.5">
         <button
           v-for="opt in store.taxOptions"
@@ -224,7 +230,6 @@
         >
           {{ opt.rateLabel }}
         </button>
-        <!-- Placeholder buttons while loading -->
         <template v-if="store.taxOptions.length === 0">
           <div v-for="i in 8" :key="i" class="px-3 py-1.5 rounded-full" style="background:#F0F0F0;width:52px;height:30px" />
         </template>
@@ -243,7 +248,6 @@
       :disabled="!store.canCalculate || store.loadingCalc"
       @click="store.calculate()"
     >
-      <!-- Loading spinner -->
       <svg
         v-if="store.loadingCalc"
         width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
@@ -251,7 +255,6 @@
       >
         <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
       </svg>
-      <!-- Calc icon -->
       <svg
         v-else
         width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
@@ -284,12 +287,19 @@ import type { InputMode } from '~/types'
 
 const store = useFlexiCalculatorStore()
 
+// Thai month names for Buddhist Era header (+543 added to CE year)
+const THAI_MONTHS = [
+  'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน',
+  'พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม',
+  'กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม',
+]
+
 // Convert stored ISO string (ค.ศ.) → Date object for v-calendar model
 const dobAsDate = computed<Date | null>(() =>
   store.dob ? new Date(store.dob) : null
 )
 
-// Called when user picks a date in the v-calendar popup
+// Called when user picks a date in the popup
 function onDateSelect(date: Date | null) {
   if (!date) return
   const iso = toISODate(date)
