@@ -1,14 +1,10 @@
 <!--
-  FlexiSetup.vue
-  Calculator Setup: gender toggle, DOB picker (v-calendar พ.ศ. → auto age), bidirectional input tabs,
-  tax rate selector, and "คำนวณเบี้ยประกัน" button.
-
-  DATE PICKER ARCHITECTURE:
-  - Trigger button: always in DOM (outside ClientOnly) — no SSR/hydration issues
-  - VCalendar: inside ClientOnly + v-show (never removed after first mount)
-  - Uses resolveComponent('VCalendar') instead of direct import — avoids loading
-    v-calendar module on the server, which causes SSR "reading 'month'" errors
-  - Buddhist Era header via #header-title slot with v-if guard for page safety
+  FlexiSetup.vue — date picker architecture (final):
+  - Trigger button: always in DOM, no v-calendar dependency
+  - Calendar: loaded lazily via shallowRef + onMounted (client-only, no ClientOnly wrapper)
+    v-if="calendarComp" prevents SSR rendering entirely
+  - Buddhist Era header: slot captures all props as spread object,
+    uses title string fallback with CE→BE year replacement
 -->
 <template>
   <div class="rounded-xl p-5 space-y-4" style="background:#EBF0FA;border:1.5px solid #9BB8E8">
@@ -36,16 +32,16 @@
       </div>
 
       <!-- DOB ──────────────────────────────────────────────────────────────
-           Trigger: outside ClientOnly → always in DOM → SSR-safe
-           VCalendar: inside ClientOnly + v-show → mounted once, never re-inserted
-           VCalendar resolved via global registry (resolveComponent) → not loaded on server
+           Trigger: always in DOM (no SSR issues)
+           Calendar: calendarComp is null on server, set in onMounted → client only
+           v-if="calendarComp" means calendar div is never in SSR HTML → no mismatch
       ─────────────────────────────────────────────────────────────────── -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">วันเกิด / Date of Birth</label>
 
         <div ref="calendarWrap" class="relative">
 
-          <!-- Trigger button: always rendered (SSR safe, no v-calendar dependency) -->
+          <!-- Trigger button: SSR-safe (no v-calendar at all) -->
           <button
             type="button"
             class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
@@ -74,33 +70,34 @@
             </svg>
           </button>
 
-          <!-- Calendar dropdown: client-only, v-show keeps it mounted (no re-insert errors) -->
-          <ClientOnly>
-            <div
-              v-show="calendarOpen"
-              class="absolute z-50 rounded-xl overflow-hidden"
-              style="top:calc(100% + 4px);left:0;box-shadow:0 8px 32px rgba(0,102,179,0.18);border:1.5px solid #9BB8E8;background:#FFFFFF"
+          <!-- Calendar dropdown: only exists client-side (calendarComp = null on server) -->
+          <div
+            v-if="calendarComp"
+            v-show="calendarOpen"
+            class="absolute z-50 rounded-xl overflow-hidden"
+            style="top:calc(100% + 4px);left:0;box-shadow:0 8px 32px rgba(0,102,179,0.18);border:1.5px solid #9BB8E8;background:#FFFFFF"
+          >
+            <component
+              :is="calendarComp"
+              locale="th-TH"
+              :max-date="new Date()"
+              :min-date="new Date(1900, 0, 1)"
+              color="blue"
+              :attributes="calendarAttrs"
+              @dayclick="onDayClick"
             >
-              <component
-                :is="vcalendar"
-                locale="th-TH"
-                :max-date="new Date()"
-                :min-date="new Date(1900, 0, 1)"
-                color="blue"
-                :attributes="calendarAttrs"
-                @dayclick="onDayClick"
-              >
-                <!-- Buddhist Era year: CE + 543
-                     v-calendar v3 uses v-bind="page" in slot → props are spread directly
-                     so destructure { month, year } NOT { page } -->
-                <template #header-title="{ month, year }">
-                  <span v-if="month" class="text-sm font-bold select-none" style="color:#1A2B4A">
-                    {{ THAI_MONTHS[(month as number) - 1] }} {{ (year as number) + 543 }}
-                  </span>
-                </template>
-              </component>
-            </div>
-          </ClientOnly>
+              <!--
+                v-calendar v3 header-title slot: the exact slot-prop shape varies by version.
+                Capture everything as `s` and try month/year first, fallback to title string.
+                title fallback: "มกราคม 2026" → replace 4-digit CE year with BE (+543)
+              -->
+              <template #header-title="s">
+                <span class="text-sm font-bold select-none" style="color:#1A2B4A">
+                  {{ beHeader(s) }}
+                </span>
+              </template>
+            </component>
+          </div>
 
         </div>
       </div>
@@ -272,7 +269,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, resolveComponent } from 'vue'
+import { ref, shallowRef, computed, onMounted, type Component } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
@@ -280,35 +277,52 @@ import { fmt } from '~/utils/flexiCalc'
 import { formatBE, toISODate } from '~/utils/dateFormat'
 import type { InputMode } from '~/types'
 
-// ── Resolve VCalendar from global registry (registered by plugins/vcalendar.client.ts)
-// This avoids importing v-calendar at module level on the server, which caused
-// "Cannot read properties of undefined (reading 'month')" during SSR initialization.
-// On the server: resolveComponent returns the string 'VCalendar' → unknown element (no-op)
-// On the client: resolveComponent returns the registered Calendar component ✅
-const vcalendar = resolveComponent('VCalendar')
-
 const store = useFlexiCalculatorStore()
+
+// ── Lazy-load v-calendar on client only ─────────────────────────────────
+// null on server → v-if="calendarComp" prevents any SSR rendering
+// set in onMounted (client) → no "Failed to resolve component" warnings
+const calendarComp = shallowRef<Component | null>(null)
+onMounted(async () => {
+  const { Calendar } = await import('v-calendar')
+  calendarComp.value = Calendar
+})
 
 // ── Calendar dropdown state ──────────────────────────────────────────────
 const calendarOpen = ref(false)
 const calendarWrap = ref<HTMLElement | null>(null)
-
-// Close when clicking outside — calendarWrap is always in DOM (outside ClientOnly)
 onClickOutside(calendarWrap, () => { calendarOpen.value = false })
 
-// ── Thai month names for Buddhist Era header: CE year + 543 ─────────────
+// ── Thai months ──────────────────────────────────────────────────────────
 const THAI_MONTHS = [
   'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน',
   'พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม',
   'กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม',
 ]
 
+// ── header-title slot: BE year display ──────────────────────────────────
+// v-calendar v3 spreads CalendarPage props into the slot scope.
+// We capture the whole scope as `s` and try multiple strategies:
+//   1. s.month + s.year  (direct spread, most common)
+//   2. s.title string   (pre-formatted, replace 4-digit CE year with BE)
+function beHeader(s: Record<string, unknown>): string {
+  if (!s) return ''
+  // Strategy 1: month + year props spread directly from CalendarPage
+  if (typeof s.month === 'number' && typeof s.year === 'number') {
+    return `${THAI_MONTHS[s.month - 1]} ${s.year + 543}`
+  }
+  // Strategy 2: title string "มกราคม 2026" → replace 4-digit year with BE
+  if (typeof s.title === 'string') {
+    return s.title.replace(/\d{4}/, (y) => String(Number(y) + 543))
+  }
+  return String(s.title ?? '')
+}
+
 // ── Date model ───────────────────────────────────────────────────────────
 const dobAsDate = computed<Date | null>(() =>
   store.dob ? new Date(store.dob) : null
 )
 
-// Highlight selected date in calendar
 const calendarAttrs = computed(() => {
   if (!dobAsDate.value) return []
   return [{
@@ -318,7 +332,6 @@ const calendarAttrs = computed(() => {
   }]
 })
 
-// Day click handler — Calendar emits { date, isDisabled, ... }
 function onDayClick(day: { date: Date; isDisabled?: boolean }) {
   if (day.isDisabled) return
   const iso = toISODate(day.date)
