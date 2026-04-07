@@ -1,10 +1,10 @@
 <!--
-  FlexiSetup.vue — date picker architecture (final):
-  - Trigger button: always in DOM, no v-calendar dependency
-  - Calendar: loaded lazily via shallowRef + onMounted (client-only, no ClientOnly wrapper)
-    v-if="calendarComp" prevents SSR rendering entirely
-  - Buddhist Era header: slot captures all props as spread object,
-    uses title string fallback with CE→BE year replacement
+  FlexiSetup.vue
+  Buddhist Era date picker — comprehensive CE→BE conversion:
+  1. #header-title slot  → main calendar header "มิถุนายน 2540" ✅
+  2. #nav-title slot     → year-range popup title "2535 - 2546" ✅
+  3. #nav-item slot      → individual year items "2540" ✅
+  4. MutationObserver    → bulletproof fallback for any remaining CE numbers ✅
 -->
 <template>
   <div class="rounded-xl p-5 space-y-4" style="background:#EBF0FA;border:1.5px solid #9BB8E8">
@@ -31,17 +31,13 @@
         </div>
       </div>
 
-      <!-- DOB ──────────────────────────────────────────────────────────────
-           Trigger: always in DOM (no SSR issues)
-           Calendar: calendarComp is null on server, set in onMounted → client only
-           v-if="calendarComp" means calendar div is never in SSR HTML → no mismatch
-      ─────────────────────────────────────────────────────────────────── -->
+      <!-- DOB -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">วันเกิด / Date of Birth</label>
 
         <div ref="calendarWrap" class="relative">
 
-          <!-- Trigger button: SSR-safe (no v-calendar at all) -->
+          <!-- Trigger button: always in DOM, no v-calendar dependency -->
           <button
             type="button"
             class="w-full rounded-xl text-xs text-left flex items-center gap-2 transition-all focus:outline-none"
@@ -70,7 +66,7 @@
             </svg>
           </button>
 
-          <!-- Calendar dropdown: only exists client-side (calendarComp = null on server) -->
+          <!-- Calendar: client-only (calendarComp = null on server) -->
           <div
             v-if="calendarComp"
             v-show="calendarOpen"
@@ -86,15 +82,27 @@
               :attributes="calendarAttrs"
               @dayclick="onDayClick"
             >
-              <!--
-                v-calendar v3 header-title slot: the exact slot-prop shape varies by version.
-                Capture everything as `s` and try month/year first, fallback to title string.
-                title fallback: "มกราคม 2026" → replace 4-digit CE year with BE (+543)
-              -->
+              <!-- ① Main calendar header: "มิถุนายน 2540" -->
               <template #header-title="s">
                 <span class="text-sm font-bold select-none" style="color:#1A2B4A">
-                  {{ beHeader(s) }}
+                  {{ beHeader(s as Record<string,unknown>) }}
                 </span>
+              </template>
+
+              <!-- ② Year-range popup title: "2535 - 2546" (slot forwarded CalendarPane → CalendarNav) -->
+              <template #nav-title="s">
+                <button
+                  class="vc-nav-title"
+                  style="font-weight:700;color:#1A2B4A"
+                  @click="(s as any).toggleMode?.()"
+                >
+                  {{ ceToBE((s as any).title ?? '') }}
+                </button>
+              </template>
+
+              <!-- ③ Individual year items in popup: 1997 → 2540 -->
+              <template #nav-item="s">
+                {{ navItemBE((s as any).item ?? s) }}
               </template>
             </component>
           </div>
@@ -102,21 +110,17 @@
         </div>
       </div>
 
-      <!-- Age (read-only — auto-calculated from DOB) -->
+      <!-- Age (read-only) -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">อายุ / Age</label>
         <div
           class="flex items-center gap-2 rounded-xl px-3"
           style="background:#FFFFFF;border:1.5px solid #9BB8E8;height:38px"
         >
-          <span class="text-xl font-bold" style="color:#0066B3">
-            {{ store.age ?? '—' }}
-          </span>
+          <span class="text-xl font-bold" style="color:#0066B3">{{ store.age ?? '—' }}</span>
           <span class="text-xs" style="color:#666666">
             ปี
-            <template v-if="store.premiumResult">
-              · อัตรา {{ store.premiumResult.rate }}/พัน
-            </template>
+            <template v-if="store.premiumResult"> · อัตรา {{ store.premiumResult.rate }}/พัน</template>
           </span>
         </div>
       </div>
@@ -206,14 +210,8 @@
     <div class="pt-3" style="border-top:1.5px solid #9BB8E8">
       <div class="flex items-center justify-between mb-2.5">
         <div class="flex items-center gap-2">
-          <p class="text-[10px] font-bold uppercase tracking-wider" style="color:#0066B3">
-            ประโยชน์ทางภาษี / Tax Benefit
-          </p>
-          <span
-            v-if="store.taxSaving > 0"
-            class="text-[10px] font-bold px-2 py-0.5 rounded-full"
-            style="background:#F0FFF4;color:#0A8A4C"
-          >
+          <p class="text-[10px] font-bold uppercase tracking-wider" style="color:#0066B3">ประโยชน์ทางภาษี / Tax Benefit</p>
+          <span v-if="store.taxSaving > 0" class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#F0FFF4;color:#0A8A4C">
             ประหยัด ฿{{ fmt(store.taxSaving) }}/ปี
           </span>
         </div>
@@ -230,9 +228,7 @@
             ? `background:${opt.rate === 0 ? '#0066B3' : '#0A8A4C'};color:#FFFFFF;box-shadow:0 2px 8px ${opt.rate === 0 ? '#0066B344' : '#0A8A4C44'}`
             : 'background:#FFFFFF;color:#777777'"
           @click="store.selectedTaxOption = opt"
-        >
-          {{ opt.rateLabel }}
-        </button>
+        >{{ opt.rateLabel }}</button>
         <template v-if="store.taxOptions.length === 0">
           <div v-for="i in 8" :key="i" class="px-3 py-1.5 rounded-full" style="background:#F0F0F0;width:52px;height:30px" />
         </template>
@@ -261,7 +257,6 @@
       {{ store.loadingCalc ? 'กำลังคำนวณ…' : store.isCalculated ? 'คำนวณใหม่' : 'คำนวณเบี้ยประกัน' }}
     </button>
 
-    <!-- Validation hint -->
     <p v-if="!store.canCalculate && !store.loadingCalc" class="text-center text-[11px]" style="color:#AAAAAA">
       {{ validationHint }}
     </p>
@@ -269,7 +264,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted, type Component } from 'vue'
+import { ref, shallowRef, computed, onMounted, onUnmounted, nextTick, type Component } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import { MODE_CONFIG, MODE_ORDER } from '~/constants/flexiConstants'
@@ -279,14 +274,54 @@ import type { InputMode } from '~/types'
 
 const store = useFlexiCalculatorStore()
 
-// ── Lazy-load v-calendar on client only ─────────────────────────────────
-// null on server → v-if="calendarComp" prevents any SSR rendering
-// set in onMounted (client) → no "Failed to resolve component" warnings
+// ── Lazy-load Calendar client-only ──────────────────────────────────────
 const calendarComp = shallowRef<Component | null>(null)
+let navObserver: MutationObserver | null = null
+
 onMounted(async () => {
   const { Calendar } = await import('v-calendar')
   calendarComp.value = Calendar
+
+  // ④ MutationObserver: bulletproof fallback — converts any CE years that
+  //    slip past the slots (e.g., when nav slots aren't forwarded by CalendarPane)
+  await nextTick()
+  if (calendarWrap.value) {
+    navObserver = new MutationObserver(() => fixNavBE())
+    navObserver.observe(calendarWrap.value, { subtree: true, childList: true })
+  }
 })
+
+onUnmounted(() => {
+  navObserver?.disconnect()
+  navObserver = null
+})
+
+// ── MutationObserver: fix CE years in nav DOM elements ───────────────────
+// Targets .vc-nav-title ("1992 - 2003") and .vc-nav-item ("1997")
+// Safe: CE years 1900-2099 don't overlap with BE years 2443-2642
+function fixNavBE() {
+  const root = calendarWrap.value
+  if (!root) return
+
+  // Nav range title: "1992 - 2003" → "2535 - 2546"
+  root.querySelectorAll<HTMLElement>('.vc-nav-title').forEach(el => {
+    const text = el.textContent ?? ''
+    const fixed = text.replace(/\b(\d{4})\b/g, m => {
+      const n = Number(m)
+      return n >= 1900 && n <= 2099 ? String(n + 543) : m
+    })
+    if (fixed !== text) el.textContent = fixed
+  })
+
+  // Individual year buttons: "1997" → "2540"
+  root.querySelectorAll<HTMLElement>('.vc-nav-item').forEach(el => {
+    const text = (el.textContent ?? '').trim()
+    if (/^\d{4}$/.test(text)) {
+      const n = Number(text)
+      if (n >= 1900 && n <= 2099) el.textContent = String(n + 543)
+    }
+  })
+}
 
 // ── Calendar dropdown state ──────────────────────────────────────────────
 const calendarOpen = ref(false)
@@ -300,22 +335,36 @@ const THAI_MONTHS = [
   'กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม',
 ]
 
-// ── header-title slot: BE year display ──────────────────────────────────
-// v-calendar v3 spreads CalendarPage props into the slot scope.
-// We capture the whole scope as `s` and try multiple strategies:
-//   1. s.month + s.year  (direct spread, most common)
-//   2. s.title string   (pre-formatted, replace 4-digit CE year with BE)
+// ── CE → BE year conversion helpers ─────────────────────────────────────
+
+/** Replace all 4-digit CE years (1900-2099) with BE (+543) in a string */
+function ceToBE(text: string): string {
+  return text.replace(/\b(\d{4})\b/g, m => {
+    const n = Number(m)
+    return n >= 1900 && n <= 2099 ? String(n + 543) : m
+  })
+}
+
+/** #header-title slot — captures spread props from CalendarPage */
 function beHeader(s: Record<string, unknown>): string {
   if (!s) return ''
-  // Strategy 1: month + year props spread directly from CalendarPage
+  // Strategy A: month + year props spread directly (v-calendar v3 v-bind="page")
   if (typeof s.month === 'number' && typeof s.year === 'number') {
     return `${THAI_MONTHS[s.month - 1]} ${s.year + 543}`
   }
-  // Strategy 2: title string "มกราคม 2026" → replace 4-digit year with BE
-  if (typeof s.title === 'string') {
-    return s.title.replace(/\d{4}/, (y) => String(Number(y) + 543))
+  // Strategy B: pre-formatted title string
+  if (typeof s.title === 'string') return ceToBE(s.title)
+  return ''
+}
+
+/** #nav-item slot — individual year or Thai month abbreviation */
+function navItemBE(item: Record<string, unknown>): string | number {
+  const label = String(item?.label ?? item?.year ?? '')
+  if (/^\d{4}$/.test(label)) {
+    const n = Number(label)
+    if (n >= 1900 && n <= 2099) return n + 543
   }
-  return String(s.title ?? '')
+  return label  // Thai month abbreviation: pass through unchanged
 }
 
 // ── Date model ───────────────────────────────────────────────────────────
