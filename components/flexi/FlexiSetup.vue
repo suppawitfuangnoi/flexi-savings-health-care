@@ -114,14 +114,15 @@
       <!-- Age (read-only) -->
       <div class="space-y-1.5">
         <label class="text-[11px] font-semibold" style="color:#666666">อายุ / Age</label>
-        <div
-          class="flex items-center gap-2 rounded-xl px-3"
-          style="background:#FFFFFF;border:1.5px solid #9BB8E8;height:38px"
-        >
-          <span class="text-xl font-bold" style="color:#0066B3">{{ store.age ?? '—' }}</span>
-          <span class="text-xs" style="color:#666666">
-            ปี
-            <template v-if="store.premiumResult"> · อัตรา {{ store.premiumResult.rate }}/พัน</template>
+        <div class="flex items-center gap-2">
+          <div
+            class="flex items-center justify-center rounded-xl flex-1"
+            style="background:#FFFFFF;border:1.5px solid #9BB8E8;height:38px"
+          >
+            <span class="text-xl font-bold" style="color:#0066B3">{{ store.age ?? '—' }}</span>
+          </div>
+          <span class="text-xs shrink-0" style="color:#666666">
+            ปี<template v-if="store.premiumResult"> · อัตรา {{ store.premiumResult.rate }}/พัน</template>
           </span>
         </div>
       </div>
