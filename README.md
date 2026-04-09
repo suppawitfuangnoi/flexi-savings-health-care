@@ -587,7 +587,15 @@ npm run dev
 
 ## Changelog
 
-### v1.2.0 (current)
+### v1.2.2 (current)
+- **Fix: preserve scenarios on hospital switch** — เปลี่ยนโรงพยาบาลแล้วโรคที่เลือกไว้ยังอยู่ครบ โดย remap ค่าใช้จ่ายตามชื่อโรค (match by name); โรค "กำหนดเอง" คง cost เดิม
+
+### v1.2.1
+- **Auto-calculation** — แทนที่ปุ่ม "คำนวณเบี้ยประกัน" ด้วย watch+debounce 800ms; status bar แสดง 4 สถานะ (กำลังคำนวณ / สำเร็จ / error / รอข้อมูล)
+- **Friendly error messages** — parse `FetchError` status code → ข้อความภาษาไทย แทน raw HTTP string
+- **Docker support** — เพิ่ม `Dockerfile` (multi-stage build) และ `.dockerignore`
+
+### v1.2.0
 - **19-point refactor** ตาม code review
 - Store เรียก server routes ผ่าน `$fetch('/api/*')` — ไม่เรียก services โดยตรงอีกต่อไป
 - แยก `fmt()` → `utils/formatters.ts`, `calcTaxSaving()` → `utils/taxCalc.ts`
