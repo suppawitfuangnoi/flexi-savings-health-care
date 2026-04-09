@@ -284,11 +284,22 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     async selectHospital(hospitalId: number) {
       this.selectedHospitalId   = hospitalId
       this.hospitalDropdownOpen = false
-      this.scenarios = []
+
+      // Fetch new hospital's scenario lists first — do NOT clear scenarios yet
       await Promise.all([
         this.fetchScenarios(hospitalId, 'adult'),
         this.fetchScenarios(hospitalId, 'children'),
       ])
+
+      // Remap costs of already-selected scenarios to the new hospital's pricing.
+      // Match by name (same disease list across all hospitals, only cost differs).
+      // Custom scenarios (user-typed cost) are left unchanged.
+      this.scenarios = this.scenarios.map(sc => {
+        if (sc.isCustom) return sc
+        const list = sc.category === 'children' ? this.childrenScenarios : this.adultScenarios
+        const match = list.find(s => s.name === sc.name)
+        return match ? { ...sc, cost: match.estimatedCost } : sc
+      })
     },
 
     addScenario(scenario: Scenario) {
