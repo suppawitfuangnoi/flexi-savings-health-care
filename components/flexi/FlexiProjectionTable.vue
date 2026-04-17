@@ -1,33 +1,48 @@
 <!--
   FlexiProjectionTable.vue
-  Transposed 12-year benefit projection table (or chart toggle).
-  Pixel-perfect port of React FlexiCalculatorModal.tsx lines ~1162–1425.
-  Wraps both the table view and imports FlexiProjectionChart for chart view.
+  12-year benefit projection table (transposed) with optional chart view.
+  CI colours aligned to React source (FlexiCalculatorModal.tsx § Projection Table).
+
+  Design decisions:
+  - All colour tokens live in one `C` constant — single place to update CI.
+  - Shared base-style strings (ROW_LABEL_BASE, DATA_CELL_BASE) eliminate repetition.
+  - Pure helper functions (yearHeaderCellStyle, dataCellStyle, healthCellStyle)
+    keep the template declarative and free of inline logic.
+  - Nuxt-specific behaviour (scenario integration in the health row) is preserved
+    intact; only colour values are changed to match the React CI.
 -->
 <template>
-  <div class="rounded-xl overflow-hidden" style="border:1.5px solid #9BB8E8">
+  <div class="rounded-xl overflow-hidden" style="border:1.5px solid #E2E8F0">
 
-    <!-- Header -->
-    <div class="px-5 py-3 flex items-center justify-between" style="background:#EBF0FA;border-bottom:1px solid #9BB8E8">
+    <!-- ── Header ─────────────────────────────────────────────────────────── -->
+    <div
+      class="px-5 py-4 flex items-center justify-between"
+      :style="`background:${C.headerBg};border-bottom:2px solid ${C.headerBorder}`"
+    >
       <div>
-        <p class="font-bold text-sm" style="color:#0066B3">ตารางแสดงผลประโยชน์ / Benefit Projection</p>
-        <p class="text-[11px]" style="color:#999999">ทุนประกัน ฿{{ fmt(r?.sumAssured ?? 0) }} — ปีกรมธรรม์ 1–12</p>
+        <p class="font-bold text-sm tracking-wide" style="color:#FFFFFF">
+          ตารางแสดงผลประโยชน์ / Benefit Projection
+        </p>
+        <p class="text-[11px] mt-0.5" style="color:rgba(255,255,255,0.55)">
+          ทุนประกัน ฿{{ fmt(r?.sumAssured ?? 0) }} — ปีกรมธรรม์ 1–12
+        </p>
       </div>
+
       <!-- View toggle -->
-      <div class="flex rounded-lg overflow-hidden" style="border:1.5px solid #9BB8E8">
+      <div class="flex rounded-lg overflow-hidden" style="border:1.5px solid rgba(255,255,255,0.25)">
         <button
           v-for="v in (['table', 'chart'] as const)"
           :key="v"
           class="px-3 py-1.5 text-[11px] font-bold transition-all"
-          :style="store.projectionView === v ? 'background:#0066B3;color:#FFFFFF' : 'background:#FFFFFF;color:#0066B3'"
+          :style="store.projectionView === v
+            ? 'background:rgba(255,255,255,0.2);color:#FFFFFF'
+            : 'background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.65)'"
           @click="store.projectionView = v"
         >
           <span class="flex items-center gap-1">
-            <!-- Table icon -->
             <svg v-if="v === 'table'" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>
             </svg>
-            <!-- Chart icon -->
             <svg v-else width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>
             </svg>
@@ -37,10 +52,12 @@
       </div>
     </div>
 
-    <!-- Chart view -->
+    <!-- ── Chart view ──────────────────────────────────────────────────────── -->
     <template v-if="store.projectionView === 'chart'">
       <div class="p-5">
-        <p class="text-[11px] font-bold uppercase tracking-wider mb-3" style="color:#666">ผลประโยชน์สะสม VS เบี้ยสะสม</p>
+        <p class="text-[11px] font-bold uppercase tracking-wider mb-3" style="color:#666">
+          ผลประโยชน์สะสม VS เบี้ยสะสม
+        </p>
         <div style="height:280px">
           <Line :data="lineChartData" :options="lineChartOptions" />
         </div>
@@ -61,18 +78,17 @@
       </div>
     </template>
 
-    <!-- Table view -->
+    <!-- ── Table view ──────────────────────────────────────────────────────── -->
     <template v-else>
       <div class="overflow-x-auto">
-        <!-- Payment period indicator row -->
-        <div
-          style="display:grid;grid-template-columns:140px repeat(12, minmax(64px,1fr)) 80px;background:#F8F9FF;border-bottom:1px solid #E2E8F0"
-        >
+
+        <!-- Payment period indicator -->
+        <div style="display:grid;grid-template-columns:140px repeat(12,minmax(64px,1fr)) 80px;background:#F8F9FF;border-bottom:1px solid #E2E8F0">
           <div style="padding:4px 14px" />
-          <div style="grid-column:span 6;text-align:center;padding:4px 8px;font-size:9px;font-weight:700;color:#4CAF50;letter-spacing:0.05em;border-right:2px dashed #C8E6C9">
+          <div style="grid-column:span 6;text-align:center;padding:4px 8px;font-size:9px;font-weight:700;color:#003893;letter-spacing:0.05em;border-right:2px dashed #CBD5E1">
             ◀ ช่วงชำระเบี้ย ปีที่ 1–6 ▶
           </div>
-          <div style="grid-column:span 6;text-align:center;padding:4px 8px;font-size:9px;font-weight:700;color:#2E5AAC;letter-spacing:0.05em">
+          <div style="grid-column:span 6;text-align:center;padding:4px 8px;font-size:9px;font-weight:700;color:#004CB3;letter-spacing:0.05em">
             ◀ ไม่ต้องชำระเบี้ย ปีที่ 7–12 ▶
           </div>
           <div />
@@ -82,29 +98,29 @@
           <thead>
             <tr>
               <!-- Type column header -->
-              <th style="background:#0D1B2E;color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px;text-align:left;border-bottom:2px solid #0066B3">
+              <th :style="`background:${C.typeColBg};color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px;text-align:left;border-bottom:2px solid ${C.headerBorder}`">
                 ประเภท
               </th>
               <!-- Year columns -->
               <th
                 v-for="y in 12"
                 :key="y"
-                :style="`padding:8px 4px;text-align:center;font-size:11px;border-left:${y === 7 ? '2px dashed rgba(255,255,255,0.3)' : '1px solid rgba(255,255,255,0.08)'};min-width:64px;background:${y === 12 ? '#0A8A4C' : y <= 6 ? '#1A2B4A' : '#2A3D5C'};color:#FFFFFF;font-weight:700;border-bottom:none`"
+                :style="yearHeaderCellStyle(y)"
               >
                 <span style="font-size:11px">ปี {{ y }}</span>
-                <span v-if="y === 12" style="display:block;font-size:8px;color:rgba(255,255,255,0.7);margin-top:1px">ครบสัญญา</span>
+                <span v-if="y === 12" style="display:block;font-size:8px;color:rgba(255,255,255,0.75);margin-top:1px">ครบสัญญา</span>
               </th>
-              <!-- Summary header -->
-              <th style="padding:8px 4px;text-align:center;font-size:11px;background:#0066B3;color:#FFFFFF;font-weight:700;border-bottom:none;min-width:88px;border-left:2px solid rgba(255,255,255,0.2)">
+              <!-- Summary column header -->
+              <th :style="`padding:8px 4px;text-align:center;font-size:11px;background:${C.summaryColBg};color:#FFFFFF;font-weight:700;border-bottom:none;min-width:88px;border-left:2px solid rgba(255,255,255,0.25)`">
                 สรุป
               </th>
             </tr>
           </thead>
-          <tbody>
 
-            <!-- Row 1: เบี้ยประกัน -->
+          <tbody>
+            <!-- ── Row 1: เบี้ยประกัน ────────────────────────────────────── -->
             <tr>
-              <td style="background:#388E3C;color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px">
+              <td :style="`${ROW_LABEL_BASE};background:${C.rowPremium}`">
                 <div style="display:flex;align-items:center;gap:6px">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
@@ -115,26 +131,24 @@
                   </div>
                 </div>
               </td>
-              <td
-                v-for="y in 12"
-                :key="y"
-                :style="`padding:8px 4px;text-align:center;font-size:11px;border-left:${y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'};border-bottom:1px solid #EBF0FA;min-width:64px;background:${y <= 6 ? (y % 2 === 0 ? '#F1FBF2' : '#FFFFFF') : (y % 2 === 0 ? '#FAFAFA' : '#FFFFFF')}`"
-              >
+              <td v-for="y in 12" :key="y" :style="dataCellStyle(y)">
                 <template v-if="y <= 6">
-                  <span style="font-weight:700;display:block;font-size:11px;color:#2E7D32">฿{{ fmt(r?.annualPremium ?? 0) }}</span>
-                  <span style="display:block;font-size:9px;color:#A5D6A7">ชำระเบี้ย</span>
+                  <span :style="`font-weight:700;display:block;font-size:11px;color:${C.premiumValue}`">
+                    ฿{{ fmt(r?.annualPremium ?? 0) }}
+                  </span>
+                  <span :style="`display:block;font-size:9px;color:${C.premiumSubLabel}`">ชำระเบี้ย</span>
                 </template>
                 <span v-else style="color:#DDDDDD;font-size:13px">—</span>
               </td>
-              <td style="padding:8px 4px;text-align:center;font-size:11px;border-left:2px solid #F5AAAA;border-bottom:1px solid #EBF0FA;min-width:64px;background:#FFF0F0">
+              <td :style="`${DATA_CELL_BASE};background:${C.premiumSummaryBg};border-left:2px solid ${C.premiumSummaryBorder}`">
                 <span style="font-weight:700;display:block;color:#E53E3E;font-size:12px">-฿{{ fmt(r?.totalPremium ?? 0) }}</span>
                 <span style="display:block;color:#999;font-size:9px">รวม 6 ปี</span>
               </td>
             </tr>
 
-            <!-- Row 2: คุ้มครองชีวิต -->
+            <!-- ── Row 2: คุ้มครองชีวิต ──────────────────────────────────── -->
             <tr>
-              <td style="background:#1565C0;color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px">
+              <td :style="`${ROW_LABEL_BASE};background:${C.rowLifeCover}`">
                 <div style="display:flex;align-items:center;gap:6px">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -145,25 +159,21 @@
                   </div>
                 </div>
               </td>
-              <td
-                v-for="y in 12"
-                :key="y"
-                :style="`padding:8px 4px;text-align:center;font-size:11px;border-left:${y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'};border-bottom:1px solid #EBF0FA;min-width:64px;background:${y % 2 === 0 ? '#EEF3FF' : '#FFFFFF'}`"
-              >
+              <td v-for="y in 12" :key="y" :style="dataCellStyle(y)">
                 <span
                   style="font-weight:700"
-                  :style="`color:${Math.min(y * 101, 606) === 606 ? '#0A8A4C' : '#2E5AAC'};font-size:${Math.min(y * 101, 606) === 606 ? 12 : 11}px`"
-                >{{ Math.min(y * 101, 606) }}%</span>
+                  :style="`color:${C.coverageValue};font-size:${coveragePercent(y) === MAX_COVERAGE ? 12 : 11}px`"
+                >{{ coveragePercent(y) }}%</span>
               </td>
-              <td style="padding:8px 4px;text-align:center;font-size:11px;border-left:2px solid #9BB8E8;border-bottom:1px solid #EBF0FA;background:#EEF3FF">
-                <span style="font-weight:700;display:block;color:#0A8A4C;font-size:12px">606%</span>
+              <td :style="`${DATA_CELL_BASE};background:${C.coverageSummaryBg};border-left:2px solid ${C.coverageSummaryBorder}`">
+                <span :style="`font-weight:700;display:block;font-size:12px;color:${C.coverageValue}`">{{ MAX_COVERAGE }}%</span>
                 <span style="display:block;color:#999;font-size:9px">สูงสุด</span>
               </td>
             </tr>
 
-            <!-- Row 3: เงินคืน 2% -->
+            <!-- ── Row 3: เงินคืน 2% ─────────────────────────────────────── -->
             <tr>
-              <td style="background:#0277BD;color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px">
+              <td :style="`${ROW_LABEL_BASE};background:${C.rowCashReturn}`">
                 <div style="display:flex;align-items:center;gap:6px">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="8"/>
@@ -175,23 +185,19 @@
                   </div>
                 </div>
               </td>
-              <td
-                v-for="y in 12"
-                :key="y"
-                :style="`padding:8px 4px;text-align:center;font-size:11px;border-left:${y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'};border-bottom:1px solid #EBF0FA;min-width:64px;background:${y % 2 === 0 ? '#E3F4FF' : '#FFFFFF'}`"
-              >
-                <span style="font-weight:700;color:#0277BD;font-size:11px">2%</span>
+              <td v-for="y in 12" :key="y" :style="dataCellStyle(y)">
+                <span :style="`font-weight:700;font-size:11px;color:${C.cashReturnValue}`">2%</span>
                 <span style="display:block;color:#999;font-size:9px">฿{{ fmt(r?.cashReturn ?? 0) }}</span>
               </td>
-              <td style="padding:8px 4px;text-align:center;font-size:11px;border-left:2px solid #9BB8E8;border-bottom:1px solid #EBF0FA;background:#E3F4FF">
-                <span style="font-weight:700;display:block;color:#0277BD;font-size:12px">฿{{ fmt((r?.cashReturn ?? 0) * 12) }}</span>
+              <td :style="`${DATA_CELL_BASE};background:${C.cashSummaryBg};border-left:2px solid ${C.cashSummaryBorder}`">
+                <span :style="`font-weight:700;display:block;font-size:12px;color:${C.cashReturnValue}`">฿{{ fmt((r?.cashReturn ?? 0) * 12) }}</span>
                 <span style="display:block;color:#999;font-size:9px">24% × ทุน</span>
               </td>
             </tr>
 
-            <!-- Row 4: วงเงินสุขภาพ -->
+            <!-- ── Row 4: วงเงินสุขภาพ (Nuxt-specific: scenario-integrated) ── -->
             <tr>
-              <td style="background:#E65100;color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px">
+              <td :style="`${ROW_LABEL_BASE};background:${C.rowHealth}`">
                 <div style="display:flex;align-items:center;gap:6px">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/>
@@ -202,13 +208,7 @@
                   </div>
                 </div>
               </td>
-              <td
-                v-for="yd in yearData"
-                :key="yd.y"
-                :style="`padding:8px 4px;text-align:center;font-size:11px;border-bottom:1px solid #EBF0FA;min-width:64px;
-                  background:${yd.coverageStatus ? statusColors[yd.coverageStatus].bg : yd.y % 2 === 0 ? '#FFF3E8' : '#FFFFFF'};
-                  border-left:${yd.hasScenario ? `2px solid ${statusColors[yd.coverageStatus ?? 'full'].text}` : yd.y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'}`"
-              >
+              <td v-for="yd in yearData" :key="yd.y" :style="healthCellStyle(yd)">
                 <template v-if="yd.hasScenario">
                   <span
                     v-for="(sc, j) in yd.yearScenarios"
@@ -227,12 +227,12 @@
                   <span style="display:block;font-weight:600;color:#999;font-size:9px">฿{{ fmt(_benefitAtYear(yd.y)) }}</span>
                 </template>
                 <template v-else>
-                  <span style="font-weight:700;color:#E65100;font-size:11px">{{ yd.y * 10 }}%</span>
+                  <span :style="`font-weight:700;font-size:11px;color:${C.healthValue}`">{{ yd.y * 10 }}%</span>
                   <span style="display:block;color:#999;font-size:9px">฿{{ fmt(_benefitAtYear(yd.y)) }}</span>
                 </template>
               </td>
-              <td style="padding:8px 4px;text-align:center;font-size:11px;border-left:2px solid #E8A84C;border-bottom:1px solid #EBF0FA;background:#FFF3E8">
-                <span style="font-weight:700;display:block;color:#E65100;font-size:12px">฿{{ fmt(maxAccumulated) }}</span>
+              <td :style="`${DATA_CELL_BASE};background:${C.healthSummaryBg};border-left:2px solid ${C.healthSummaryBorder}`">
+                <span :style="`font-weight:700;display:block;font-size:12px;color:${C.healthValue}`">฿{{ fmt(maxAccumulated) }}</span>
                 <span style="display:block;color:#999;font-size:9px">120% × ทุน</span>
               </td>
             </tr>
@@ -242,19 +242,19 @@
       </div>
     </template>
 
-    <!-- ── Payout cards: โบนัส + ครบสัญญา (attached to bottom of table, matching React) ── -->
-    <div class="grid grid-cols-2 gap-0" style="border-top:1.5px solid #E2E8F0">
+    <!-- ── Payout cards: โบนัส + ครบสัญญา ───────────────────────────────── -->
+    <div class="grid grid-cols-2 gap-0" :style="`border-top:${C.cardDivider}`">
 
       <!-- Card 1: โบนัส 20% -->
       <div
-        class="p-5 flex gap-4 items-start"
-        style="border-right:1px solid #E2E8F0;background:linear-gradient(135deg,#FFFDF5 0%,#FFF8E7 100%)"
+        class="p-4 flex gap-3 items-center"
+        :style="`border-right:${C.cardBorderRight};background:${C.card1Bg}`"
       >
         <div
-          class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-          style="background:linear-gradient(135deg,#F59E0B,#D97706);box-shadow:0 4px 12px rgba(217,119,6,0.25)"
+          class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+          :style="`background:${C.card1IconBg};box-shadow:0 3px 10px rgba(0,56,147,0.25)`"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 12 20 22 4 22 4 12"/>
             <rect x="2" y="7" width="20" height="5"/>
             <path d="M12 22V7"/>
@@ -263,36 +263,34 @@
           </svg>
         </div>
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1 flex-wrap">
-            <span class="text-[9px] font-bold px-2 py-0.5 rounded-full" style="background:#FEF3C7;color:#B45309">จ่ายปีที่ 12</span>
+          <div class="flex items-center gap-1.5 mb-1 flex-wrap">
+            <span
+              class="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+              :style="`background:${C.card1BadgeBg};color:${C.card1BadgeText}`"
+            >ปีที่ 12</span>
+            <span class="text-[9px] font-semibold" :style="`color:${C.card1Label}`">
+              โบนัส 20% สุขภาพคงเหลือ
+            </span>
           </div>
-          <p class="text-[10px] font-semibold leading-snug mb-1.5" style="color:#78350F">
-            โบนัส 20% ของผลประโยชน์เพิ่มพิเศษ<br/>ด้านสุขภาพคงเหลือ
+          <p class="text-xl font-extrabold leading-none" :style="`color:${C.card1Amount}`">
+            ฿{{ fmt(noClaimBonusAdj) }}
           </p>
-          <p class="text-2xl font-extrabold leading-none" style="color:#0A8A4C">฿{{ fmt(noClaimBonusAdj) }}</p>
-          <div class="mt-2 rounded-lg px-3 py-1.5" style="background:rgba(0,0,0,0.04)">
-            <p class="text-[10px]" style="color:#92400E">
-              20% × วงเงินคงเหลือ <span class="font-bold" style="color:#B45309">฿{{ fmt(maxAccumulated) }}</span>
-            </p>
-            <p
-              v-if="maxAccumulated < (r?.healthPerYear ?? 0) * 12"
-              class="text-[10px] mt-0.5"
-              style="color:#DC2626"
-            >ลดลงจากสถานการณ์ที่เพิ่ม</p>
-          </div>
+          <p class="text-[10px] mt-1" :style="`color:${C.card1Sub}`">
+            20% × ฿{{ fmt(maxAccumulated) }}
+            <span v-if="maxAccumulated < (r?.healthPerYear ?? 0) * 12" style="color:#DC2626">
+              (ปรับตามใช้จริง)
+            </span>
+          </p>
         </div>
       </div>
 
-      <!-- Card 2: ครบสัญญา 500% -->
-      <div
-        class="p-5 flex gap-4 items-start"
-        style="background:linear-gradient(135deg,#F0F7FF 0%,#EBF2FF 100%)"
-      >
+      <!-- Card 2: เงินครบสัญญา 500% -->
+      <div class="p-4 flex gap-3 items-center" :style="`background:${C.card2Bg}`">
         <div
-          class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-          style="background:linear-gradient(135deg,#1A2B4A,#2E5AAC);box-shadow:0 4px 12px rgba(46,90,172,0.25)"
+          class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+          :style="`background:${C.card2IconBg};box-shadow:0 3px 10px rgba(0,0,0,0.15)`"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
             <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
             <path d="M4 22h16"/>
@@ -302,21 +300,25 @@
           </svg>
         </div>
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1 flex-wrap">
-            <span class="text-[9px] font-bold px-2 py-0.5 rounded-full" style="background:#DBEAFE;color:#1D4ED8">จ่ายปีที่ 12</span>
-            <span class="text-[9px] font-bold px-2 py-0.5 rounded-full" style="background:#D1FAE5;color:#065F46">500% ทุนประกัน</span>
+          <div class="flex items-center gap-1.5 mb-1 flex-wrap">
+            <span
+              class="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+              :style="`background:${C.card2BadgeBg};color:${C.card2BadgeText}`"
+            >ปีที่ 12</span>
+            <span class="text-[9px] font-semibold" :style="`color:${C.card2SubText}`">
+              เงินครบสัญญา 500%
+            </span>
           </div>
-          <p class="text-[10px] font-semibold leading-snug mb-1.5" style="color:#1E3A5F">เงินครบสัญญา</p>
-          <p class="text-2xl font-extrabold leading-none" style="color:#0A8A4C">฿{{ fmt(r?.maturity ?? 0) }}</p>
-          <div class="mt-2 rounded-lg px-3 py-1.5" style="background:rgba(0,0,0,0.04)">
-            <p class="text-[10px]" style="color:#1E3A5F">
-              500% × ทุนประกัน <span class="font-bold" style="color:#2E5AAC">฿{{ fmt(r?.sumAssured ?? 0) }}</span>
-            </p>
-          </div>
+          <p class="text-xl font-extrabold leading-none" :style="`color:${C.card2Amount}`">
+            ฿{{ fmt(r?.maturity ?? 0) }}
+          </p>
+          <p class="text-[10px] mt-1" :style="`color:${C.card2SubText}`">
+            500% × ฿{{ fmt(r?.sumAssured ?? 0) }}
+          </p>
         </div>
       </div>
-    </div>
 
+    </div>
   </div>
 </template>
 
@@ -327,21 +329,142 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend,
 } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { benefitAtYear } from '~/utils/flexiCalc'
-import { fmt } from '~/utils/formatters'
+import { benefitAtYear }           from '~/utils/flexiCalc'
+import { fmt }                     from '~/utils/formatters'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
+// ── Store ─────────────────────────────────────────────────────────────────────
 const store = useFlexiCalculatorStore()
+const r     = computed(() => store.premiumResult)
 
-// Use premiumResult from API
-const r = computed(() => store.premiumResult)
+// ── Business constants ────────────────────────────────────────────────────────
+const MAX_COVERAGE = 606 // Max life-cover % (101% × 6 years)
 
-// Simplified wrapper — cost is in scenario.cost, no hospitalPct needed
-const _benefitAtYear = (y: number) =>
-  benefitAtYear(y, store.scenarios, store.healthPerYear)
+// ── Design tokens — CI aligned to React source ────────────────────────────────
+// Single source of truth for all colour values. Update here to restyle globally.
+const C = {
+  // Table header chrome
+  headerBg:              'linear-gradient(135deg, #001240 0%, #002D7A 60%, #003893 100%)',
+  headerBorder:          '#004CB3',
+  typeColBg:             '#001240',
+  summaryColBg:          '#003893',
 
-// Per-year data
+  // Year column headers
+  yearPaying:            '#003893', // ปีที่ 1–6  (paying period)
+  yearFree:              '#004CB3', // ปีที่ 7–11 (free period)
+  yearMaturity:          '#0047AB', // ปีที่ 12   (maturity year)
+
+  // Row label backgrounds (left sticky column)
+  rowPremium:            '#003893',
+  rowLifeCover:          '#003893',
+  rowCashReturn:         '#004CB3',
+  rowHealth:             '#E65100',
+
+  // Data cell alternating backgrounds (rows 1–3)
+  cellEven:              '#EEF3FC',
+  cellOdd:               '#F5F8FF',
+
+  // Health row data cell alternating backgrounds (row 4)
+  healthCellEven:        '#FFF3E8',
+  healthCellOdd:         '#FFF9F5',
+
+  // Value text colours in data cells
+  premiumValue:          '#003893',
+  premiumSubLabel:       '#7099D4',
+  coverageValue:         '#003893',
+  cashReturnValue:       '#004CB3',
+  healthValue:           '#E65100',
+
+  // Summary column (rightmost) backgrounds & borders
+  premiumSummaryBg:      '#FFF0F0',
+  premiumSummaryBorder:  '#F5AAAA',
+  coverageSummaryBg:     '#E6EDF8',
+  coverageSummaryBorder: '#CBD5E1',
+  cashSummaryBg:         '#E6EDF8',
+  cashSummaryBorder:     '#CBD5E1',
+  healthSummaryBg:       '#FFF3E8',
+  healthSummaryBorder:   '#E8A84C',
+
+  // Payout cards chrome
+  cardDivider:           '1.5px solid #7099D4',
+  cardBorderRight:       '1px solid #7099D4',
+
+  // Card 1 – โบนัส 20% (light navy theme)
+  card1Bg:               'linear-gradient(135deg, #E6EDF8 0%, #EDF2FB 100%)',
+  card1IconBg:           'linear-gradient(135deg, #003893, #004CB3)',
+  card1BadgeBg:          '#003893',
+  card1BadgeText:        '#FFFFFF',
+  card1Label:            '#004CB3',
+  card1Amount:           '#003893',
+  card1Sub:              '#5577AA',
+
+  // Card 2 – ครบสัญญา 500% (deep navy theme)
+  card2Bg:               'linear-gradient(135deg, #003893 0%, #004CB3 100%)',
+  card2IconBg:           'rgba(255,255,255,0.15)',
+  card2BadgeBg:          'rgba(255,255,255,0.2)',
+  card2BadgeText:        '#FFFFFF',
+  card2Amount:           '#FFFFFF',
+  card2SubText:          'rgba(255,255,255,0.65)',
+} as const
+
+// ── Shared base style strings (DRY) ──────────────────────────────────────────
+const ROW_LABEL_BASE =
+  'color:#FFFFFF;font-weight:700;font-size:11px;padding:10px 14px;' +
+  'white-space:nowrap;position:sticky;left:0;z-index:1;min-width:140px'
+
+const DATA_CELL_BASE =
+  'padding:8px 4px;text-align:center;font-size:11px;' +
+  'border-bottom:1px solid #EBF0FA;min-width:64px'
+
+// ── Style helper functions ────────────────────────────────────────────────────
+
+/** Returns the inline style string for a year-column header cell. */
+function yearHeaderCellStyle(y: number): string {
+  const bg         = y === 12 ? C.yearMaturity : y <= 6 ? C.yearPaying : C.yearFree
+  const opacity    = y > 6 && y < 12 ? '0.88' : '1'
+  const borderLeft = y === 7
+    ? '2px dashed rgba(255,255,255,0.3)'
+    : '1px solid rgba(255,255,255,0.10)'
+  return (
+    `padding:8px 4px;text-align:center;font-size:11px;min-width:64px;` +
+    `background:${bg};color:#FFFFFF;font-weight:700;border-bottom:none;` +
+    `border-left:${borderLeft};opacity:${opacity}`
+  )
+}
+
+/**
+ * Returns the inline style string for a standard data cell (rows 1–3).
+ * Alternates between two light blues regardless of which row it belongs to,
+ * matching the React CI.
+ */
+function dataCellStyle(y: number): string {
+  const bg = y % 2 === 0 ? C.cellEven : C.cellOdd
+  const bl = y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'
+  return `${DATA_CELL_BASE};background:${bg};border-left:${bl}`
+}
+
+/**
+ * Returns the inline style string for a health-row data cell (row 4).
+ * When a scenario is active the border highlights the coverage status colour;
+ * otherwise the cell falls back to the orange alternating palette.
+ */
+function healthCellStyle(yd: typeof yearData.value[number]): string {
+  const bg = yd.coverageStatus
+    ? statusColors[yd.coverageStatus].bg
+    : yd.y % 2 === 0 ? C.healthCellEven : C.healthCellOdd
+  const bl = yd.hasScenario
+    ? `2px solid ${statusColors[yd.coverageStatus ?? 'full'].text}`
+    : yd.y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'
+  return `${DATA_CELL_BASE};background:${bg};border-left:${bl}`
+}
+
+/** Life-cover cumulative percentage for a given year, capped at MAX_COVERAGE. */
+function coveragePercent(y: number): number {
+  return Math.min(y * 101, MAX_COVERAGE)
+}
+
+// ── Health-row status colours (Nuxt-specific: scenario coverage feedback) ─────
 const statusColors: Record<string, { bg: string; text: string }> = {
   healthy: { bg: '#E3F2FD', text: '#2E5AAC' },
   full:    { bg: '#E8F5E9', text: '#0A8A4C' },
@@ -349,29 +472,35 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   low:     { bg: '#FEECEC', text: '#E53E3E' },
 }
 
-const yearData = computed(() => Array.from({ length: 12 }, (_, i) => {
-  const y             = i + 1
-  const yearScenarios = store.scenarios.filter(s => s.year === y)
-  const hasScenario   = yearScenarios.length > 0
-  const totalCost     = yearScenarios.reduce((sum, sc) => sum + sc.cost, 0)
-  const healthAcc     = store.healthPerYear * y
-  const covered       = Math.min(totalCost, healthAcc)
-  const outOfPocket   = Math.max(0, totalCost - healthAcc)
-  const coverageStatus = hasScenario
-    ? (totalCost === 0 ? 'healthy' : outOfPocket === 0 ? 'full' : covered > 0 ? 'partial' : 'low')
-    : null
-  return { y, yearScenarios, hasScenario, totalCost, covered, outOfPocket, coverageStatus }
-}))
+// ── Per-year data for health row ──────────────────────────────────────────────
+const _benefitAtYear = (y: number) =>
+  benefitAtYear(y, store.scenarios, store.healthPerYear)
+
+const yearData = computed(() =>
+  Array.from({ length: 12 }, (_, i) => {
+    const y             = i + 1
+    const yearScenarios = store.scenarios.filter(s => s.year === y)
+    const hasScenario   = yearScenarios.length > 0
+    const totalCost     = yearScenarios.reduce((sum, sc) => sum + sc.cost, 0)
+    const healthAcc     = store.healthPerYear * y
+    const covered       = Math.min(totalCost, healthAcc)
+    const outOfPocket   = Math.max(0, totalCost - healthAcc)
+    const coverageStatus = hasScenario
+      ? (totalCost === 0 ? 'healthy' : outOfPocket === 0 ? 'full' : covered > 0 ? 'partial' : 'low')
+      : null
+    return { y, yearScenarios, hasScenario, totalCost, covered, outOfPocket, coverageStatus }
+  }),
+)
 
 const maxAccumulated  = computed(() => _benefitAtYear(12))
 const noClaimBonusAdj = computed(() => maxAccumulated.value * 0.20)
 
-// Line chart
+// ── Line chart ────────────────────────────────────────────────────────────────
 const lineChartData = computed(() => {
   if (!r.value) return { labels: [], datasets: [] }
   const res            = r.value
   const taxSavingTotal = (store.selectedTaxOption?.rate ?? 0) > 0
-    ? Math.min(res.annualPremium, 100000) * (store.selectedTaxOption!.rate) * 6
+    ? Math.min(res.annualPremium, 100_000) * store.selectedTaxOption!.rate * 6
     : 0
   const years = Array.from({ length: 12 }, (_, i) => i + 1)
   return {
@@ -385,7 +514,9 @@ const lineChartData = computed(() => {
       },
       {
         label: 'ผลประโยชน์รวม',
-        data:  years.map(y => res.cashReturn * y + _benefitAtYear(y) + (y === 12 ? res.maturity + taxSavingTotal : 0)),
+        data:  years.map(y =>
+          res.cashReturn * y + _benefitAtYear(y) + (y === 12 ? res.maturity + taxSavingTotal : 0),
+        ),
         borderColor: '#0066B3', borderWidth: 2.5,
         backgroundColor: 'rgba(0,102,179,0.10)', fill: true, tension: 0.4, pointRadius: 0,
       },
