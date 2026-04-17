@@ -48,6 +48,13 @@ export interface ClientPersonalInfo {
 
 export type InputMode    = 'premium' | 'sa' | 'health'
 export type ScenarioList = 'adult' | 'children'
+export type CareCategory = 'health' | 'proactive' | 'preventive' | 'restorative' | 'aesthetics'
+export type OtherCareKey = Exclude<CareCategory, 'health'>
+
+export interface CareInfoItem  { icon: string; text: string }
+export interface CareAgeGroup  { label: string; items: CareInfoItem[] }
+export interface CareInfoEntry { concept: string; groups: CareAgeGroup[] }
+export interface AestheticClinic { name: string; tier: 'luxury' | 'premium' | 'standard' }
 
 export interface Scenario {
   year:       number

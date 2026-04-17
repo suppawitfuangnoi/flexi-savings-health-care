@@ -37,6 +37,7 @@
       <!-- Sections shown only after calculation -->
       <template v-if="calcStore.isCalculated">
         <FlexiBenefitSummary />
+        <FlexiOtherCare />
         <FlexiProjectionTable />
         <FlexiPayoutSummary />
       </template>
@@ -64,6 +65,7 @@ import { ref, onMounted } from 'vue'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
 import FlexiSetup           from '~/components/flexi/FlexiSetup.vue'
 import FlexiBenefitSummary  from '~/components/flexi/FlexiBenefitSummary.vue'
+import FlexiOtherCare       from '~/components/flexi/FlexiOtherCare.vue'
 import FlexiProjectionTable from '~/components/flexi/FlexiProjectionTable.vue'
 import FlexiPayoutSummary   from '~/components/flexi/FlexiPayoutSummary.vue'
 
