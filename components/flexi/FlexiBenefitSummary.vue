@@ -156,14 +156,20 @@ const ILLNESS_TABS = [
 
 // ── Derived budgets ───────────────────────────────────────────────────────────
 
-/** Health budget accumulated to the selected year. */
+/**
+ * Health balance at the selected year — uses store.benefitAtYear so that
+ * actual yearExpenses entered in the projection table are reflected here too.
+ */
 const selectedBudget = computed(() =>
-  store.healthPerYear * store.pendingYear,
+  store.benefitAtYear(store.pendingYear),
 )
 
-/** Maximum budget at year 12 (shown in the collapsed header). */
+/**
+ * Remaining health balance at year 12 — shown in the collapsed header.
+ * Decreases if the user has entered yearExpenses in the projection table.
+ */
 const maxBudget = computed(() =>
-  store.healthPerYear * CONTRACT_YEARS,
+  store.benefitAtYear(CONTRACT_YEARS),
 )
 
 // ── Reset children tab when age goes above 18 ────────────────────────────────
@@ -178,7 +184,7 @@ const barData = computed(() => ({
   labels: Array.from({ length: CONTRACT_YEARS }, (_, i) => `ปี ${i + 1}`),
   datasets: [{
     data: Array.from({ length: CONTRACT_YEARS }, (_, i) =>
-      store.healthPerYear * (i + 1),
+      store.benefitAtYear(i + 1),
     ),
     backgroundColor: Array.from({ length: CONTRACT_YEARS }, (_, i) =>
       store.pendingYear === i + 1 ? '#004CB3' : '#7099D4',

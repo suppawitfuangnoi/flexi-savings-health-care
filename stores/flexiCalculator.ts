@@ -49,6 +49,8 @@ interface FlexiCalculatorState {
   pendingYear:     number              // Year selected in the bar chart
   illnessTab:      ApiScenarioCategory // 'adult' | 'children'
   illnessExpanded: boolean             // Expand/collapse coverage grid
+  // ── Year expenses (interactive projection row) ────────────────────────────
+  yearExpenses:    Record<number, number> // Actual expenses entered per policy year
   // ── Hospital ──────────────────────────────────────────────────────────────
   selectedHospitalId:   number | null
   hospitalDropdownOpen: boolean
@@ -85,6 +87,8 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     illnessTab:      'adult',
     illnessExpanded: false,
 
+    yearExpenses:    {},
+
     selectedHospitalId:   null,
     hospitalDropdownOpen: false,
 
@@ -110,11 +114,29 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
     // ── Financial totals ────────────────────────────────────────────────────
 
     /**
-     * No-claim bonus: 20% of the fully-accumulated health benefit at year 12.
-     * The full 120% × SA accumulates since there is no scenario usage to deduct.
+     * Running health balance at the end of year y — mirrors React's benefitAtYear().
+     * Deducts actual yearExpenses entered by the user from the accumulated balance.
+     * Returns a function so callers can pass the desired year.
+     */
+    benefitAtYear(): (y: number) => number {
+      return (y: number): number => {
+        if (!this.premiumResult) return 0
+        let balance = 0
+        for (let yr = 1; yr <= y; yr++) {
+          balance += this.healthPerYear
+          const custom = this.yearExpenses[yr] ?? 0
+          if (custom > 0) balance = Math.max(0, balance - custom)
+        }
+        return balance
+      }
+    },
+
+    /**
+     * No-claim bonus: 20% of the remaining health balance at year 12.
+     * Decreases when the user enters actual yearExpenses (mirrors React exactly).
      */
     noClaimBonusAdj(): number {
-      return this.healthPerYear * CONTRACT_YEARS * NO_CLAIM_BONUS_PCT
+      return this.benefitAtYear(12) * NO_CLAIM_BONUS_PCT
     },
 
     /** Annual tax saving based on selected bracket and annual premium. */
@@ -287,6 +309,16 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
         this.fetchScenarios(hospitalId, 'adult'),
         this.fetchScenarios(hospitalId, 'children'),
       ])
+    },
+
+    /** Set actual expense for a single policy year (from the projection table row). */
+    setYearExpense(year: number, amount: number) {
+      this.yearExpenses = { ...this.yearExpenses, [year]: amount }
+    },
+
+    /** Clear all entered year expenses (reset Row 5 to blank). */
+    clearYearExpenses() {
+      this.yearExpenses = {}
     },
 
     reset() {

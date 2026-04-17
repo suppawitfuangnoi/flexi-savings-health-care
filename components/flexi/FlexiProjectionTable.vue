@@ -218,6 +218,69 @@
               </td>
             </tr>
 
+            <!-- ── Row 5: ค่าใช้จ่ายจริง — interactive per-year expense inputs ── -->
+            <tr>
+              <td :style="`${ROW_LABEL_BASE};background:#003893`">
+                <!-- Title + pencil icon + clear button -->
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <div style="flex:1">
+                    <div style="font-size:11px;font-weight:700">ค่าใช้จ่ายจริง</div>
+                    <div style="font-size:9px;color:rgba(255,255,255,0.55);font-weight:400">กรอกต่อปี หรือเติมทุกปี</div>
+                  </div>
+                  <button
+                    v-if="hasAnyExpense"
+                    title="ล้างทั้งหมด"
+                    style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:2px 5px;cursor:pointer;color:#FFFFFF;font-size:9px;font-weight:700;line-height:1.2;white-space:nowrap"
+                    @click="store.clearYearExpenses()"
+                  >✕ ล้าง</button>
+                </div>
+                <!-- Fill-all input row -->
+                <div style="display:flex;align-items:center;gap:4px">
+                  <span style="font-size:9px;color:rgba(255,255,255,0.5);flex-shrink:0">฿</span>
+                  <input
+                    v-model.number="fillAmount"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    placeholder="จำนวน/ปี"
+                    style="flex:1;min-width:0;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:4px;padding:3px 5px;font-size:9px;color:#FFFFFF;outline:none;font-weight:600"
+                  />
+                  <button
+                    :style="`background:${fillAmount ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'};border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:3px 6px;cursor:${fillAmount ? 'pointer' : 'default'};color:${fillAmount ? '#FFFFFF' : 'rgba(255,255,255,0.35)'};font-size:9px;font-weight:700;white-space:nowrap;flex-shrink:0`"
+                    @click="fillAllYears"
+                  >เติมทุกปี</button>
+                </div>
+              </td>
+              <!-- Per-year expense inputs -->
+              <td v-for="y in 12" :key="y" :style="expenseCellStyle(y)">
+                <input
+                  :value="store.yearExpenses[y] || ''"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  placeholder="0"
+                  :style="`width:100%;text-align:center;font-size:10px;font-weight:${(store.yearExpenses[y] ?? 0) > 0 ? 700 : 400};color:${(store.yearExpenses[y] ?? 0) > 0 ? '#003893' : '#BBBBBB'};background:transparent;border:none;outline:none`"
+                  @input="onExpenseInput(y, $event)"
+                />
+                <span
+                  v-if="(store.yearExpenses[y] ?? 0) > 0"
+                  style="display:block;font-size:8px;color:#004CB3;text-align:center"
+                >฿{{ fmt(store.yearExpenses[y]!) }}</span>
+              </td>
+              <!-- Summary cell -->
+              <td :style="`${DATA_CELL_BASE};background:#E6EDF8;border-left:2px solid #7099D4`">
+                <template v-if="totalExpenses > 0">
+                  <span style="font-weight:700;display:block;color:#003893;font-size:12px">฿{{ fmt(totalExpenses) }}</span>
+                  <span style="display:block;color:#999;font-size:9px">รวมทั้งหมด</span>
+                </template>
+                <span v-else style="color:#DDDDDD;font-size:13px">—</span>
+              </td>
+            </tr>
+
           </tbody>
         </table>
       </div>
@@ -304,7 +367,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend,
@@ -439,16 +502,58 @@ function coveragePercent(y: number): number {
   return Math.min(y * 101, MAX_COVERAGE)
 }
 
+// ── Fill-all state (local to this component only) ────────────────────────────
+const fillAmount = ref<number | ''>('')
+
 // ── Health row helpers ────────────────────────────────────────────────────────
 
-/** Accumulated health benefit for year y — simple linear growth, no scenarios. */
-const benefitForYear = (y: number): number => store.healthPerYear * y
+/**
+ * Running health balance at year y — delegates to store getter which
+ * deducts yearExpenses entered in Row 5, matching React's benefitAtYear().
+ */
+const benefitForYear = (y: number): number => store.benefitAtYear(y)
 
-/** Max accumulated health benefit at contract end (year 12). */
-const maxAccumulated  = computed(() => benefitForYear(12))
+/** Max accumulated health benefit at contract end (year 12) — dynamic. */
+const maxAccumulated  = computed(() => store.benefitAtYear(12))
 
-/** No-claim bonus from store (already simplified, no scenario deductions). */
+/** No-claim bonus from store — decreases as user enters actual expenses. */
 const noClaimBonusAdj = computed(() => store.noClaimBonusAdj)
+
+// ── Row 5 helpers ─────────────────────────────────────────────────────────────
+
+/** True when any year has a non-zero expense entered (shows the clear button). */
+const hasAnyExpense = computed(() =>
+  Object.values(store.yearExpenses).some(v => v > 0),
+)
+
+/** Sum of all entered year expenses (summary cell). */
+const totalExpenses = computed(() =>
+  Object.values(store.yearExpenses).reduce((s, v) => s + (v || 0), 0),
+)
+
+/** Fill all 12 years with the same amount from the fill-all input. */
+function fillAllYears() {
+  if (!fillAmount.value) return
+  const amt = Number(fillAmount.value)
+  for (let y = 1; y <= 12; y++) store.setYearExpense(y, amt)
+}
+
+/** Handle per-year expense input change. */
+function onExpenseInput(year: number, event: Event) {
+  const v = Math.max(0, parseInt((event.target as HTMLInputElement).value) || 0)
+  store.setYearExpense(year, v)
+}
+
+/**
+ * Returns the inline style for a Row 5 data cell.
+ * Highlights filled cells in light blue; empty cells use the standard alternating pattern.
+ */
+function expenseCellStyle(y: number): string {
+  const val = store.yearExpenses[y] ?? 0
+  const bg  = val > 0 ? '#E6EDF8' : y % 2 === 0 ? '#EEF3FC' : '#F5F8FF'
+  const bl  = y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'
+  return `${DATA_CELL_BASE};background:${bg};border-left:${bl};padding:4px 2px`
+}
 
 // ── Line chart ────────────────────────────────────────────────────────────────
 const lineChartData = computed(() => {

@@ -46,8 +46,11 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 
 const store = useFlexiCalculatorStore()
 
-/** Accumulated health benefit for year y — linear growth, no scenario deductions. */
-const _benefitAtYear = (y: number): number => store.healthPerYear * y
+/**
+ * Health balance at year y — delegates to store getter so the chart reflects
+ * any yearExpenses the user has entered in the projection table row.
+ */
+const _benefitAtYear = (y: number): number => store.benefitAtYear(y)
 
 const chartData = computed(() => {
   const r = store.premiumResult
