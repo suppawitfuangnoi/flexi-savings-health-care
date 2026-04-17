@@ -209,30 +209,30 @@
     </div>
 
     <!-- Tax rate section -->
-    <div class="pt-3" style="border-top:1.5px solid #9BB8E8">
+    <div class="pt-3" style="border-top:1.5px solid #E2E8F0">
       <div class="flex items-center justify-between mb-2.5">
         <div class="flex items-center gap-2">
-          <p class="text-[10px] font-bold uppercase tracking-wider" style="color:#0066B3">ประโยชน์ทางภาษี / Tax Benefit</p>
+          <p class="text-[10px] font-bold uppercase tracking-wider" style="color:#004CB3">ประโยชน์ทางภาษี / Tax Benefit</p>
           <span v-if="store.taxSaving > 0" class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#F0FFF4;color:#0A8A4C">
             ประหยัด ฿{{ fmt(store.taxSaving) }}/ปี
           </span>
         </div>
-        <span v-if="!store.selectedTaxOption || store.selectedTaxOption.rate === 0" class="text-[10px]" style="color:#9BB8E8">
+        <span v-if="!store.selectedTaxOption || store.selectedTaxOption.rate === 0" class="text-[10px]" style="color:#BBBBBB">
           เลือกอัตราภาษีของคุณ
         </span>
       </div>
-      <div class="flex flex-wrap gap-1.5">
+      <div class="grid grid-cols-8 gap-1.5">
         <button
           v-for="opt in store.taxOptions"
           :key="opt.id"
-          class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all"
+          class="py-2.5 rounded-xl text-[11px] font-bold transition-all"
           :style="store.selectedTaxOption?.id === opt.id
-            ? `background:${opt.rate === 0 ? '#0066B3' : '#0A8A4C'};color:#FFFFFF;box-shadow:0 2px 8px ${opt.rate === 0 ? '#0066B344' : '#0A8A4C44'}`
-            : 'background:#FFFFFF;color:#777777'"
+            ? `background:${opt.rate === 0 ? '#004CB3' : '#0A8A4C'};color:#FFFFFF;border:1.5px solid ${opt.rate === 0 ? '#004CB3' : '#0A8A4C'};box-shadow:0 2px 8px ${opt.rate === 0 ? '#004CB340' : '#0A8A4C44'}`
+            : 'background:#FFFFFF;color:#444444;border:1.5px solid #CBD5E1'"
           @click="store.selectedTaxOption = opt"
         >{{ opt.rateLabel }}</button>
         <template v-if="store.taxOptions.length === 0">
-          <div v-for="i in 8" :key="i" class="px-3 py-1.5 rounded-full" style="background:#F0F0F0;width:52px;height:30px" />
+          <div v-for="i in 8" :key="i" class="py-2.5 rounded-xl" style="background:#F0F0F0" />
         </template>
       </div>
       <span class="inline-block mt-2 px-3 py-1 rounded-full text-[11px] font-bold" style="background:#FFF8E1;color:#D97706">
