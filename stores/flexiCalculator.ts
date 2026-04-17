@@ -11,7 +11,7 @@ import { defineStore } from 'pinia'
 import { $fetch } from 'ofetch'
 import {
   dobFromAge, ageFromDob,
-  CONTRACT_YEARS, NO_CLAIM_BONUS_PCT, MAX_AGE,
+  CONTRACT_YEARS, PAYMENT_YEARS, NO_CLAIM_BONUS_PCT, MAX_AGE,
 } from '~/utils/flexiCalc'
 import { MODE_CONFIG, DEFAULT_HOSPITAL_SHORT } from '~/constants/flexiConstants'
 import type { InputMode } from '~/types'
@@ -144,6 +144,35 @@ export const useFlexiCalculatorStore = defineStore('flexiCalculator', {
       if (!this.selectedTaxOption || this.selectedTaxOption.rate === 0 || !this.premiumResult) return 0
       const deductible = Math.min(this.premiumResult.annualPremium, this.selectedTaxOption.maxDeductible)
       return Math.round(deductible * this.selectedTaxOption.rate)
+    },
+
+    /**
+     * Total tax saving over the 6-year payment period — mirrors React's totalTaxBenefit.
+     * Shown as a lump-sum in the payout summary card.
+     */
+    totalTaxBenefit(): number {
+      return this.taxSaving * PAYMENT_YEARS
+    },
+
+    /**
+     * Total health benefit actually covered by the policy over 12 years.
+     * Counts only the portion of yearExpenses that the running balance can absorb —
+     * capped per year, mirrors React's totalHealthUsedByUser memo.
+     */
+    totalHealthUsedByUser(): number {
+      if (!this.premiumResult) return 0
+      let balance = 0
+      let covered = 0
+      for (let yr = 1; yr <= CONTRACT_YEARS; yr++) {
+        balance += this.healthPerYear
+        const expense = this.yearExpenses[yr] ?? 0
+        if (expense > 0) {
+          const used = Math.min(expense, balance)
+          covered += used
+          balance  = Math.max(0, balance - expense)
+        }
+      }
+      return covered
     },
 
     /**
