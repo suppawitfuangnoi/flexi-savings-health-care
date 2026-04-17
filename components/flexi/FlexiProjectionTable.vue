@@ -195,7 +195,7 @@
               </td>
             </tr>
 
-            <!-- ── Row 4: วงเงินสุขภาพ (Nuxt-specific: scenario-integrated) ── -->
+            <!-- ── Row 4: ค่ารักษา/ปี — static display, matches React source ─── -->
             <tr>
               <td :style="`${ROW_LABEL_BASE};background:${C.rowHealth}`">
                 <div style="display:flex;align-items:center;gap:6px">
@@ -203,33 +203,14 @@
                     <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/>
                   </svg>
                   <div>
-                    <div style="font-size:11px;font-weight:700">วงเงินสุขภาพ</div>
+                    <div style="font-size:11px;font-weight:700">ค่ารักษา/ปี</div>
                     <div style="font-size:9px;color:rgba(255,255,255,0.65);font-weight:400">+10%/ปี สะสม</div>
                   </div>
                 </div>
               </td>
-              <td v-for="yd in yearData" :key="yd.y" :style="healthCellStyle(yd)">
-                <template v-if="yd.hasScenario">
-                  <span
-                    v-for="(sc, j) in yd.yearScenarios"
-                    :key="j"
-                    style="display:block;font-weight:700;line-height:1.2"
-                    :style="`color:${statusColors[yd.coverageStatus ?? 'full'].text};font-size:9px`"
-                  >{{ sc.name }}</span>
-                  <span
-                    v-if="yd.totalCost > 0"
-                    style="display:block;font-weight:600;font-size:9px"
-                    :style="`color:${statusColors[yd.coverageStatus ?? 'full'].text}`"
-                  >
-                    {{ yd.outOfPocket > 0 ? `เกิน ฿${fmt(yd.outOfPocket)}` : `✓ ฿${fmt(yd.covered)}` }}
-                  </span>
-                  <span v-else :style="`color:${statusColors[yd.coverageStatus ?? 'full'].text};font-size:10px`">♥</span>
-                  <span style="display:block;font-weight:600;color:#999;font-size:9px">฿{{ fmt(_benefitAtYear(yd.y)) }}</span>
-                </template>
-                <template v-else>
-                  <span :style="`font-weight:700;font-size:11px;color:${C.healthValue}`">{{ yd.y * 10 }}%</span>
-                  <span style="display:block;color:#999;font-size:9px">฿{{ fmt(_benefitAtYear(yd.y)) }}</span>
-                </template>
+              <td v-for="y in 12" :key="y" :style="healthCellStyle(y)">
+                <span :style="`font-weight:700;font-size:11px;color:${C.healthValue}`">{{ y * 10 }}%</span>
+                <span style="display:block;color:#999;font-size:9px">฿{{ fmt(benefitForYear(y)) }}</span>
               </td>
               <td :style="`${DATA_CELL_BASE};background:${C.healthSummaryBg};border-left:2px solid ${C.healthSummaryBorder}`">
                 <span :style="`font-weight:700;display:block;font-size:12px;color:${C.healthValue}`">฿{{ fmt(maxAccumulated) }}</span>
@@ -329,7 +310,6 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend,
 } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { benefitAtYear }           from '~/utils/flexiCalc'
 import { fmt }                     from '~/utils/formatters'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
@@ -446,16 +426,11 @@ function dataCellStyle(y: number): string {
 
 /**
  * Returns the inline style string for a health-row data cell (row 4).
- * When a scenario is active the border highlights the coverage status colour;
- * otherwise the cell falls back to the orange alternating palette.
+ * Static orange alternating palette — matches React source (no scenario colours).
  */
-function healthCellStyle(yd: typeof yearData.value[number]): string {
-  const bg = yd.coverageStatus
-    ? statusColors[yd.coverageStatus].bg
-    : yd.y % 2 === 0 ? C.healthCellEven : C.healthCellOdd
-  const bl = yd.hasScenario
-    ? `2px solid ${statusColors[yd.coverageStatus ?? 'full'].text}`
-    : yd.y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'
+function healthCellStyle(y: number): string {
+  const bg = y % 2 === 0 ? C.healthCellEven : C.healthCellOdd
+  const bl = y === 7 ? '2px dashed #E2E8F0' : '1px solid #EBF0FA'
   return `${DATA_CELL_BASE};background:${bg};border-left:${bl}`
 }
 
@@ -464,36 +439,16 @@ function coveragePercent(y: number): number {
   return Math.min(y * 101, MAX_COVERAGE)
 }
 
-// ── Health-row status colours (Nuxt-specific: scenario coverage feedback) ─────
-const statusColors: Record<string, { bg: string; text: string }> = {
-  healthy: { bg: '#E3F2FD', text: '#2E5AAC' },
-  full:    { bg: '#E8F5E9', text: '#0A8A4C' },
-  partial: { bg: '#FFF3E0', text: '#E67E22' },
-  low:     { bg: '#FEECEC', text: '#E53E3E' },
-}
+// ── Health row helpers ────────────────────────────────────────────────────────
 
-// ── Per-year data for health row ──────────────────────────────────────────────
-const _benefitAtYear = (y: number) =>
-  benefitAtYear(y, store.scenarios, store.healthPerYear)
+/** Accumulated health benefit for year y — simple linear growth, no scenarios. */
+const benefitForYear = (y: number): number => store.healthPerYear * y
 
-const yearData = computed(() =>
-  Array.from({ length: 12 }, (_, i) => {
-    const y             = i + 1
-    const yearScenarios = store.scenarios.filter(s => s.year === y)
-    const hasScenario   = yearScenarios.length > 0
-    const totalCost     = yearScenarios.reduce((sum, sc) => sum + sc.cost, 0)
-    const healthAcc     = store.healthPerYear * y
-    const covered       = Math.min(totalCost, healthAcc)
-    const outOfPocket   = Math.max(0, totalCost - healthAcc)
-    const coverageStatus = hasScenario
-      ? (totalCost === 0 ? 'healthy' : outOfPocket === 0 ? 'full' : covered > 0 ? 'partial' : 'low')
-      : null
-    return { y, yearScenarios, hasScenario, totalCost, covered, outOfPocket, coverageStatus }
-  }),
-)
+/** Max accumulated health benefit at contract end (year 12). */
+const maxAccumulated  = computed(() => benefitForYear(12))
 
-const maxAccumulated  = computed(() => _benefitAtYear(12))
-const noClaimBonusAdj = computed(() => maxAccumulated.value * 0.20)
+/** No-claim bonus from store (already simplified, no scenario deductions). */
+const noClaimBonusAdj = computed(() => store.noClaimBonusAdj)
 
 // ── Line chart ────────────────────────────────────────────────────────────────
 const lineChartData = computed(() => {
@@ -515,14 +470,14 @@ const lineChartData = computed(() => {
       {
         label: 'ผลประโยชน์รวม',
         data:  years.map(y =>
-          res.cashReturn * y + _benefitAtYear(y) + (y === 12 ? res.maturity + taxSavingTotal : 0),
+          res.cashReturn * y + benefitForYear(y) + (y === 12 ? res.maturity + taxSavingTotal : 0),
         ),
         borderColor: '#0066B3', borderWidth: 2.5,
         backgroundColor: 'rgba(0,102,179,0.10)', fill: true, tension: 0.4, pointRadius: 0,
       },
       {
         label: 'วงเงินสุขภาพสะสม',
-        data:  years.map(y => _benefitAtYear(y)),
+        data:  years.map(y => benefitForYear(y)),
         borderColor: '#E67E22', borderWidth: 1.5, borderDash: [3, 2],
         backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0,
       },

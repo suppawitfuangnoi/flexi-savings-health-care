@@ -1,117 +1,139 @@
 <!--
   IllnessGrid.vue
-  Grid of illness/scenario cards driven by ApiScenario[] from hospital API.
+  Read-only 4-column coverage grid — matches React's illness card display.
+  Each card shows ✓ (green) or ✗ (red) depending on whether the year's
+  health budget covers the estimated cost.
+
+  Design decisions:
+  - Props: list + budget + expand controls only. No selection state.
+  - This is a passive viewer, not a selector — matches React source intent.
+  - Summary counts and disclaimer render inline (same as React source).
+  - MAX_COLLAPSED (12) mirrors React's slice(0, 12) default.
 -->
 <template>
   <div>
-    <!-- 4-column grid -->
+    <!-- 4-column coverage cards grid -->
     <div class="grid grid-cols-4 gap-1.5">
-      <button
-        v-for="item in displayItems"
-        :key="item.id"
-        class="rounded-xl p-2 text-left transition-all flex flex-col gap-1"
-        :style="isSelected(item)
-          ? `background:${accentColor};color:#FFFFFF;border:1.5px solid ${accentColor}`
-          : 'background:#F5F5F5;color:#333333;border:1.5px solid transparent'"
-        @click="emit('select', { id: item.id, category: item.category })"
-      >
-        <!-- Icon -->
-        <svg
-          width="16" height="16" viewBox="0 0 24 24" fill="none"
-          :stroke="isSelected(item) ? '#FFFFFF' : accentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          v-html="item.icon"
-        />
-        <!-- Name -->
-        <p class="text-[10px] font-bold leading-tight">{{ item.name }}</p>
-        <!-- Cost or popular badge -->
-        <div class="flex items-center gap-1 flex-wrap">
-          <span
-            v-if="item.popular && !isSelected(item)"
-            class="text-[8px] px-1 rounded-full font-bold"
-            style="background:#FFF3E0;color:#E67E22"
-          >ฮิต</span>
-          <span
-            v-if="!item.isCustom"
-            class="text-[9px] font-semibold"
-            :style="`color:${isSelected(item) ? 'rgba(255,255,255,0.8)' : '#999999'}`"
-          >฿{{ fmtShort(item.estimatedCost) }}</span>
-          <span v-else class="text-[9px]" :style="`color:${isSelected(item) ? 'rgba(255,255,255,0.8)' : '#AAAAAA'}`">กำหนดเอง</span>
-        </div>
-      </button>
-    </div>
-
-    <!-- Expand/collapse -->
-    <button
-      v-if="expandable && props.list.length > 1"
-      class="w-full mt-2 py-1.5 rounded-xl text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
-      style="background:#F0F4FF;color:#0066B3"
-      @click="emit('toggle-expand')"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline :points="illnessExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/>
-      </svg>
-      {{ illnessExpanded ? 'ย่อรายการ' : `แสดงทั้งหมด (${props.list.length} รายการ)` }}
-    </button>
-
-    <!-- Custom illness cost input -->
-    <div v-if="isCustomSelected" class="mt-2">
       <div
-        class="flex items-center gap-2 rounded-xl px-3 py-2"
-        :style="`border:1.5px solid ${accentColor};background:#F5F5F5`"
+        v-for="item in displayList"
+        :key="item.id"
+        class="px-2.5 py-2 rounded-lg"
+        :style="cardStyle(item)"
       >
-        <span class="text-sm font-bold shrink-0" :style="`color:${accentColor}`">฿</span>
-        <input
-          type="number"
-          :min="0"
-          :step="1000"
-          :value="customIllCost || undefined"
-          placeholder="ระบุค่าใช้จ่าย"
-          class="flex-1 text-sm font-bold focus:outline-none bg-transparent"
-          style="color:#1A2B4A"
-          @input="emit('custom-cost', Math.max(0, +($event.target as HTMLInputElement).value || 0))"
-        />
+        <!-- Icon + name row -->
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <svg
+            width="12" height="12" viewBox="0 0 24 24" fill="none"
+            :stroke="isCovered(item) ? '#0A8A4C' : '#E53E3E'"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            v-html="item.icon"
+          />
+          <span
+            class="text-[10px] font-semibold leading-tight"
+            :style="`color:${isCovered(item) ? '#0A8A4C' : '#E53E3E'}`"
+          >{{ item.name }}</span>
+        </div>
+        <!-- Cost + status mark row -->
+        <div class="flex items-center justify-between">
+          <span
+            class="text-[9px] font-semibold"
+            :style="`color:${isCovered(item) ? '#6EE7B7' : '#FCA5A5'}`"
+          >฿{{ fmtShort(item.estimatedCost) }}</span>
+          <span
+            class="text-[9px] font-black"
+            :style="`color:${isCovered(item) ? '#0A8A4C' : '#E53E3E'}`"
+          >{{ isCovered(item) ? '✓' : '✗' }}</span>
+        </div>
       </div>
     </div>
+
+    <!-- Expand / collapse button -->
+    <button
+      v-if="expandable && visibleList.length > MAX_COLLAPSED"
+      class="mt-1.5 w-full py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+      style="background:#EBF4FF;color:#004CB3;border:1px solid #B8D6F5"
+      @click="emit('toggle-expand')"
+    >
+      <svg
+        width="12" height="12" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round"
+        :style="`transform:${expanded ? 'rotate(180deg)' : 'none'};transition:transform 0.2s`"
+      >
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+      {{ expanded ? 'แสดงน้อยลง' : `ดูทั้งหมด ${visibleList.length} โรค` }}
+    </button>
+
+    <!-- Summary counts — mirrors React stat row -->
+    <div class="mt-2 flex items-center gap-3 text-[10px]">
+      <span style="color:#0A8A4C">✓ ดูแลได้ {{ coveredCount }} รายการ</span>
+      <span style="color:#E53E3E">✗ วงเงินไม่เพียงพอ {{ uncoveredCount }} รายการ</span>
+      <span style="color:#999999">คงเหลือ ฿{{ fmtLong(budget) }}</span>
+    </div>
+
+    <!-- Disclaimer — matches React source text exactly -->
+    <p class="text-[10px] mt-1 leading-relaxed" style="color:#BBBBBB">
+      * ค่าใช้จ่ายเป็นค่าประมาณการ อิงจากโรงพยาบาลที่เลือก ไม่รวมค่าเงินเฟ้อทางการแพทย์
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApiScenario, ApiScenarioCategory } from '~/types/api'
+import type { ApiScenario } from '~/types/api'
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+/** Number of cards shown before the "expand" button appears (mirrors React). */
+const MAX_COLLAPSED = 12
+
+// ── Props & emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
-  list:             ApiScenario[]
-  accentColor:      string
-  expandable:       boolean
-  pendingScenarioId: number | null
-  customIllCost:    number
-  illnessExpanded:  boolean
+  list:       ApiScenario[] // Full illness list for the current tab
+  budget:     number        // Health budget for the selected year
+  expandable: boolean
+  expanded:   boolean
 }>()
 
 const emit = defineEmits<{
-  select:        [payload: { id: number; category: ApiScenarioCategory }]
   'toggle-expand': []
-  'custom-cost': [value: number]
 }>()
 
-const isSelected = (item: ApiScenario) => item.id === props.pendingScenarioId
+// ── Coverage helpers ──────────────────────────────────────────────────────────
 
-const customItem  = computed(() => props.list.find(i => i.isCustom))
-const isCustomSelected = computed(() => customItem.value && isSelected(customItem.value))
+/** True when the year's budget fully covers this item's estimated cost. */
+const isCovered = (item: ApiScenario): boolean =>
+  item.estimatedCost === 0 || props.budget >= item.estimatedCost
 
-const displayItems = computed(() => {
-  if (!props.expandable) return props.list
-  if (props.illnessExpanded) return props.list
-  // Collapsed: show custom card only + a few popular ones
-  const customs  = props.list.filter(i => i.isCustom)
-  const populars = props.list.filter(i => i.popular && !i.isCustom).slice(0, 7)
-  return [...populars, ...customs]
-})
+function cardStyle(item: ApiScenario): string {
+  return isCovered(item)
+    ? 'background:#F0FBF4;border:1.5px solid #A5D6B7'
+    : 'background:#FEF2F2;border:1.5px solid #FCA5A5'
+}
 
+// ── List slicing ──────────────────────────────────────────────────────────────
+
+/** Exclude the "custom" placeholder entry — only show real illness cards. */
+const visibleList = computed(() => props.list.filter(i => !i.isCustom))
+
+const displayList = computed(() =>
+  props.expandable && !props.expanded
+    ? visibleList.value.slice(0, MAX_COLLAPSED)
+    : visibleList.value,
+)
+
+// ── Summary counts ────────────────────────────────────────────────────────────
+const coveredCount   = computed(() => visibleList.value.filter(i => isCovered(i)).length)
+const uncoveredCount = computed(() => visibleList.value.filter(i => !isCovered(i)).length)
+
+// ── Formatters ────────────────────────────────────────────────────────────────
 function fmtShort(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000)     return `${Math.round(n / 1_000)}K`
   return String(n)
+}
+
+function fmtLong(n: number): string {
+  return n.toLocaleString('th-TH')
 }
 </script>

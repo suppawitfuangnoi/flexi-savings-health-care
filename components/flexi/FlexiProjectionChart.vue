@@ -40,16 +40,14 @@ import {
   Filler, Tooltip, Legend,
 } from 'chart.js'
 import { useFlexiCalculatorStore } from '~/stores/flexiCalculator'
-import { benefitAtYear } from '~/utils/flexiCalc'
 import { fmt } from '~/utils/formatters'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
 const store = useFlexiCalculatorStore()
 
-function _benefitAtYear(y: number): number {
-  return benefitAtYear(y, store.scenarios, store.healthPerYear)
-}
+/** Accumulated health benefit for year y — linear growth, no scenario deductions. */
+const _benefitAtYear = (y: number): number => store.healthPerYear * y
 
 const chartData = computed(() => {
   const r = store.premiumResult
